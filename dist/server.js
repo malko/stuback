@@ -80,10 +80,13 @@ function loadConfig() {
 	console.log('loading config');
 	config = require(configPath);
 	// map config paths to regexps
+	var pathMapper = function pathMapper(path) {
+		return (0, _pathToRegexp2['default'])(path);
+	};
 	Object.keys(config).forEach(function (hostKey) {
-		config[hostKey].stubs && (config[hostKey].stubs = config[hostKey].stubs.map(_pathToRegexp2['default']));
-		config[hostKey].backed && (config[hostKey].backed = config[hostKey].backed.map(_pathToRegexp2['default']));
-		config[hostKey].tampered && (config[hostKey].tampered = config[hostKey].tampered.map(_pathToRegexp2['default']));
+		config[hostKey].stubs && (config[hostKey].stubs = config[hostKey].stubs.map(pathMapper));
+		config[hostKey].backed && (config[hostKey].backed = config[hostKey].backed.map(pathMapper));
+		config[hostKey].tampered && (config[hostKey].tampered = config[hostKey].tampered.map(pathMapper));
 	});
 }
 loadConfig();

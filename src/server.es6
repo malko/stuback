@@ -77,10 +77,11 @@ function loadConfig() {
 	console.log('loading config');
 	config = require(configPath);
 	// map config paths to regexps
+	let pathMapper = (path) => pathToRegexp(path);
 	Object.keys(config).forEach((hostKey) => {
-		config[hostKey].stubs && (config[hostKey].stubs = config[hostKey].stubs.map(pathToRegexp));
-		config[hostKey].backed && (config[hostKey].backed = config[hostKey].backed.map(pathToRegexp));
-		config[hostKey].tampered && (config[hostKey].tampered = config[hostKey].tampered.map(pathToRegexp));
+		config[hostKey].stubs && (config[hostKey].stubs = config[hostKey].stubs.map(pathMapper));
+		config[hostKey].backed && (config[hostKey].backed = config[hostKey].backed.map(pathMapper));
+		config[hostKey].tampered && (config[hostKey].tampered = config[hostKey].tampered.map(pathMapper));
 	});
 }
 loadConfig();
