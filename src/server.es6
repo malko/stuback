@@ -18,10 +18,10 @@ const cliOpts = {
 	verbose: false
 };
 process.argv.forEach((arg, id) => {
-	var argValue = process.argv[id+1];
-	switch(arg){
-		case "-h":
-		case "--help":
+	var argValue = process.argv[id + 1];
+	switch (arg) {
+		case '-h':
+		case '--help':
 			console.log(
 `Stuback is a proxy server to ease api development.
 
@@ -43,22 +43,22 @@ Options:
 `);
 			process.exit(0);
 			break;
-		case "-p":
-		case "--port":
+		case '-p':
+		case '--port':
 			cliOpts.port = argValue;
 			break;
-		case "-c":
-		case "--config":
+		case '-c':
+		case '--config':
 			cliOpts.config = argValue.match(/^\.?\//) ? argValue : './' + argValue;
 			break;
-		case "-v":
-		case "--verbose":
+		case '-v':
+		case '--verbose':
 			cliOpts.verbose = true;
 			break;
 	}
 });
 
-const config = require(path.normalize(process.cwd() + '/' + cliOpts.config));
+const config = require(path.normalize(cliOpts.config[0] === '/' ? cliOpts.config : (process.cwd() + '/' + cliOpts.config)));
 
 const portExp = /:\d+$/;
 const verbose = !!cliOpts.verbose;
@@ -85,8 +85,8 @@ function hashParams(v) {
 }
 
 function getStubFileName(req) {
-	return cliOpts.stubPaths + (req._parsedUrl.hostname || req._parsedUrl.host) + '/' + req.method.toLowerCase() + '-' +
-		(req._parsedUrl.path !== '/' ? encodeURIComponent(req._parsedUrl.path.replace(/^\//, '')) : '_' )+
+	return cliOpts.stubPaths + (req._parsedUrl.hostname || req._parsedUrl.host || 'localhost') + '/' + req.method.toLowerCase() + '-' +
+		(req._parsedUrl.path !== '/' ? encodeURIComponent(req._parsedUrl.path.replace(/^\//, '')) : '_') +
 		(req.params ? hashParams(req.params) : '')
 	;
 }
@@ -94,7 +94,7 @@ function getStubFileName(req) {
 function proxyMiddleware(req, res, next, options = {}) {
 	req.pause();
 	var requestOptions = {
-			hostname: req._parsedUrl.hostname || req._parsedUrl.host || req.headers.host,
+			hostname: options.targetHost || req._parsedUrl.hostname || req._parsedUrl.host || req.headers.host.replace(/:\d+$/, ''),
 			path: req._parsedUrl.path,
 			method: req.method,
 			headers: {'X-Forwarded-For': req.connection.remoteAddress}
@@ -111,7 +111,9 @@ function proxyMiddleware(req, res, next, options = {}) {
 		header.match(removeHeadersExp) || (requestOptions.headers[header] = req.headers[header]);
 	});
 
-	if (req._parsedUrl.port) {
+	if (options.targetPort) {
+		port = options.targetPort;
+	} else if (req._parsedUrl.port) {
 		port = req._parsedUrl.port;
 	} else if (req.headers.origin) {
 		req.headers.origin.replace(portExp, (m, p) => port = p);
@@ -157,7 +159,7 @@ function proxyMiddleware(req, res, next, options = {}) {
 
 	res.on('finished', () => {
 		// cacheStream.end();
-		console.log("send response %s", res);
+		console.log('send response %s', res);
 	});
 
 	req.pipe(proxyReq);
@@ -167,11 +169,11 @@ function proxyMiddleware(req, res, next, options = {}) {
 function stubMiddleware(req, res, next, options = {}) {
 	let stubFileName = getStubFileName(req);
 
-	verbose && console.log('pattern searching for %s(%s)', req.method, req.path);
+	verbose && console.log('pattern searching for %s(%s)', req.method, req._parsedUrl.path);
 
 	fs.exists(stubFileName, function (exists) {
 		if (!exists) {
-			verbose && console.log("patterns didn't found response for %s(%s) -> (%s)", req.method, req.url, path.basename(stubFileName));
+			verbose && console.log('patterns didn\'t found response for %s(%s) -> (%s)', req.method, req.url, path.basename(stubFileName));
 			if (options.passthrough) {
 				return proxyMiddleware(req, res, next, options);
 			}
@@ -190,7 +192,7 @@ var app = connect();
 // };
 
 // proxy auto config generation
-app.use('/proxy.pac', function(req, res, next){
+app.use('/proxy.pac', function (req, res, next) {
 	console.log('serving PAC for %s', req.connection.remoteAddress);
 	let address = httpServer.address();
 	let localAddress = (address.address.match(/^(|::)$/) ? '127.0.0.1' : address.address) + ':' + address.port;
@@ -205,17 +207,20 @@ app.use('/proxy.pac', function(req, res, next){
 // do the real job
 app.use((req, res, next) => {
 	verbose && console.log('request received', req.originalUrl);
-	if (!config[req._parsedUrl.hostname]) {
-		verbose && console.log("proxying call to %s", req._parsedUrl.hostname);
+	let hostKey = req._parsedUrl.hostname || 'localhost';
+	if (!config[hostKey]) {
+		verbose && console.log('proxying call to %s', hostKey);
 		return proxyMiddleware(req, res, next);
 	}
 
-	let hostConfig = config[req._parsedUrl.hostname],
+	let hostConfig = config[hostKey],
 		url = req._parsedUrl.path,
 		middleWareOptions = {
 			isStubbed: hostConfig.stubs.some(function (exp) { return !!url.match(exp); }),
 			isBacked: hostConfig.backed.some(function (exp) { return !!url.match(exp); }),
 			isTampered: hostConfig.tampered.some(function (exp) { return !!url.match(exp); }),
+			targetHost: hostConfig.targetHost,
+			targetPort: hostConfig.targetPort,
 			passthrough: !!hostConfig.passthrough
 		}
 	;

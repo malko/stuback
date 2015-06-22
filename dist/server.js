@@ -64,7 +64,7 @@ process.argv.forEach(function (arg, id) {
 	}
 });
 
-var config = require(_path2['default'].normalize(process.cwd() + '/' + cliOpts.config));
+var config = require(_path2['default'].normalize(cliOpts.config[0] === '/' ? cliOpts.config : process.cwd() + '/' + cliOpts.config));
 
 var portExp = /:\d+$/;
 var verbose = !!cliOpts.verbose;
@@ -88,7 +88,7 @@ function hashParams(v) {
 }
 
 function getStubFileName(req) {
-	return cliOpts.stubPaths + (req._parsedUrl.hostname || req._parsedUrl.host) + '/' + req.method.toLowerCase() + '-' + (req._parsedUrl.path !== '/' ? encodeURIComponent(req._parsedUrl.path.replace(/^\//, '')) : '_') + (req.params ? hashParams(req.params) : '');
+	return cliOpts.stubPaths + (req._parsedUrl.hostname || req._parsedUrl.host || 'localhost') + '/' + req.method.toLowerCase() + '-' + (req._parsedUrl.path !== '/' ? encodeURIComponent(req._parsedUrl.path.replace(/^\//, '')) : '_') + (req.params ? hashParams(req.params) : '');
 }
 
 function proxyMiddleware(req, res, next) {
@@ -96,7 +96,7 @@ function proxyMiddleware(req, res, next) {
 
 	req.pause();
 	var requestOptions = {
-		hostname: req._parsedUrl.hostname || req._parsedUrl.host || req.headers.host,
+		hostname: options.targetHost || req._parsedUrl.hostname || req._parsedUrl.host || req.headers.host.replace(/:\d+$/, ''),
 		path: req._parsedUrl.path,
 		method: req.method,
 		headers: { 'X-Forwarded-For': req.connection.remoteAddress }
@@ -112,7 +112,9 @@ function proxyMiddleware(req, res, next) {
 		header.match(removeHeadersExp) || (requestOptions.headers[header] = req.headers[header]);
 	});
 
-	if (req._parsedUrl.port) {
+	if (options.targetPort) {
+		port = options.targetPort;
+	} else if (req._parsedUrl.port) {
 		port = req._parsedUrl.port;
 	} else if (req.headers.origin) {
 		req.headers.origin.replace(portExp, function (m, p) {
@@ -176,7 +178,7 @@ function stubMiddleware(req, res, next) {
 
 	var stubFileName = getStubFileName(req);
 
-	verbose && console.log('pattern searching for %s(%s)', req.method, req.path);
+	verbose && console.log('pattern searching for %s(%s)', req.method, req._parsedUrl.path);
 
 	_fs2['default'].exists(stubFileName, function (exists) {
 		if (!exists) {
@@ -205,7 +207,7 @@ app.use('/proxy.pac', function (req, res, next) {
 	var localAddress = (address.address.match(/^(|::)$/) ? '127.0.0.1' : address.address) + ':' + address.port;
 	var pacConfig = Object.keys(config).map(function (hostKey) {
 		var direct = config[hostKey].passthrough ? '; DIRECT' : '';
-		return 'if (shExpMatch(host, \'' + hostKey + '\')) return \'PROXY ' + localAddress + '' + direct + '\';';
+		return 'if (shExpMatch(host, \'' + hostKey + '\')) return \'PROXY ' + localAddress + direct + '\';';
 	}).join('\n\t');
 	res.setHeader('Content-Type', 'application/x-ns-proxy-autoconfig');
 	res.end('function FindProxyForURL(url, host) {\n\t' + pacConfig + '\n\treturn "DIRECT";\n}');
@@ -214,12 +216,13 @@ app.use('/proxy.pac', function (req, res, next) {
 // do the real job
 app.use(function (req, res, next) {
 	verbose && console.log('request received', req.originalUrl);
-	if (!config[req._parsedUrl.hostname]) {
-		verbose && console.log('proxying call to %s', req._parsedUrl.hostname);
+	var hostKey = req._parsedUrl.hostname || 'localhost';
+	if (!config[hostKey]) {
+		verbose && console.log('proxying call to %s', hostKey);
 		return proxyMiddleware(req, res, next);
 	}
 
-	var hostConfig = config[req._parsedUrl.hostname],
+	var hostConfig = config[hostKey],
 	    url = req._parsedUrl.path,
 	    middleWareOptions = {
 		isStubbed: hostConfig.stubs.some(function (exp) {
@@ -231,6 +234,8 @@ app.use(function (req, res, next) {
 		isTampered: hostConfig.tampered.some(function (exp) {
 			return !!url.match(exp);
 		}),
+		targetHost: hostConfig.targetHost,
+		targetPort: hostConfig.targetPort,
 		passthrough: !!hostConfig.passthrough
 	};
 
