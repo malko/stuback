@@ -23,7 +23,7 @@ const proxyBackupRemovedHeaders = [
 const cliOpts = {
 	port: 3000,
 	config: 'config.js',
-	stubPaths: path.normalize(process.argv.pop() + '/'),
+	stubPaths: path.normalize(process.argv[process.argv.length - 1] + '/'),
 	verbose: false
 };
 process.argv.forEach((arg, id) => {
@@ -196,7 +196,7 @@ function stubMiddleware(req, res, next, options = {}) {
 			}
 			return next();
 		}
-		console.log('Reply with get/%s', path.basename(stubFileName));
+		verbose && console.log('Reply with get/%s', path.basename(stubFileName));
 		let stub = fs.createReadStream(stubFileName);
 		stub.pipe(res);
 	});

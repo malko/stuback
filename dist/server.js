@@ -44,7 +44,7 @@ var proxyBackupRemovedHeaders = ['if-modified-since', // avoid getting 304 respo
 var cliOpts = {
 	port: 3000,
 	config: 'config.js',
-	stubPaths: _path2['default'].normalize(process.argv.pop() + '/'),
+	stubPaths: _path2['default'].normalize(process.argv[process.argv.length - 1] + '/'),
 	verbose: false
 };
 process.argv.forEach(function (arg, id) {
@@ -85,8 +85,7 @@ function loadConfig() {
 		config[hostKey].backed && (config[hostKey].backed = config[hostKey].backed.map(_pathToRegexp2['default']));
 		config[hostKey].tampered && (config[hostKey].tampered = config[hostKey].tampered.map(_pathToRegexp2['default']));
 	});
-	console.log(config);
-};
+}
 loadConfig();
 _fs2['default'].watch(configPath, loadConfig);
 
@@ -206,7 +205,7 @@ function stubMiddleware(req, res, next) {
 			}
 			return next();
 		}
-		console.log('Reply with get/%s', _path2['default'].basename(stubFileName));
+		verbose && console.log('Reply with get/%s', _path2['default'].basename(stubFileName));
 		var stub = _fs2['default'].createReadStream(stubFileName);
 		stub.pipe(res);
 	});
