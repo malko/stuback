@@ -34,7 +34,13 @@ var _pathToRegexp = require('path-to-regexp');
 
 var _pathToRegexp2 = _interopRequireDefault(_pathToRegexp);
 
-// cli parameters parsing
+var portExp = /:\d+$/;
+var proxyRemovedHeaders = ['host', 'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailer', 'transfer-encoding', 'upgrade'];
+var proxyBackupRemovedHeaders = ['if-modified-since', // avoid getting 304 response on browser refresh
+'accept-encoding' // we want human readable content
+];
+
+//-- cli parameters parsing
 var cliOpts = {
 	port: 3000,
 	config: 'config.js',
@@ -64,21 +70,25 @@ process.argv.forEach(function (arg, id) {
 	}
 });
 
-var config = require(_path2['default'].normalize(cliOpts.config[0] === '/' ? cliOpts.config : process.cwd() + '/' + cliOpts.config));
-
-var portExp = /:\d+$/;
 var verbose = !!cliOpts.verbose;
-var proxyRemovedHeaders = ['host', 'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailer', 'transfer-encoding', 'upgrade'];
-var proxyBackupRemovedHeaders = ['if-modified-since', // avoid getting 304 response on browser refresh
-'accept-encoding' // we want human readable content
-];
 
-// map config paths to regexps
-Object.keys(config).forEach(function (hostKey) {
-	config[hostKey].stubs && (config[hostKey].stubs = config[hostKey].stubs.map(_pathToRegexp2['default']));
-	config[hostKey].backed && (config[hostKey].backed = config[hostKey].backed.map(_pathToRegexp2['default']));
-	config[hostKey].tampered && (config[hostKey].tampered = config[hostKey].tampered.map(_pathToRegexp2['default']));
-});
+//-- load configuration file and watch it for change
+var configPath = require.resolve(_path2['default'].normalize(cliOpts.config[0] === '/' ? cliOpts.config : process.cwd() + '/' + cliOpts.config));
+var config;
+function loadConfig() {
+	delete require.cache[configPath];
+	console.log('loading config');
+	config = require(configPath);
+	// map config paths to regexps
+	Object.keys(config).forEach(function (hostKey) {
+		config[hostKey].stubs && (config[hostKey].stubs = config[hostKey].stubs.map(_pathToRegexp2['default']));
+		config[hostKey].backed && (config[hostKey].backed = config[hostKey].backed.map(_pathToRegexp2['default']));
+		config[hostKey].tampered && (config[hostKey].tampered = config[hostKey].tampered.map(_pathToRegexp2['default']));
+	});
+	console.log(config);
+};
+loadConfig();
+_fs2['default'].watch(configPath, loadConfig);
 
 function hashParams(v) {
 	if (!(v.length || Object.keys(v).length)) {
@@ -95,8 +105,9 @@ function proxyMiddleware(req, res, next) {
 	var options = arguments[3] === undefined ? {} : arguments[3];
 
 	req.pause();
-	var requestOptions = {
-		hostname: options.targetHost || req._parsedUrl.hostname || req._parsedUrl.host || req.headers.host.replace(/:\d+$/, ''),
+	var hostConfig = options.hostConfig || {},
+	    requestOptions = {
+		hostname: hostConfig.targetHost || req._parsedUrl.hostname || req._parsedUrl.host || req.headers.host.replace(/:\d+$/, ''),
 		path: req._parsedUrl.path,
 		method: req.method,
 		headers: { 'X-Forwarded-For': req.connection.remoteAddress }
@@ -112,8 +123,8 @@ function proxyMiddleware(req, res, next) {
 		header.match(removeHeadersExp) || (requestOptions.headers[header] = req.headers[header]);
 	});
 
-	if (options.targetPort) {
-		port = options.targetPort;
+	if (hostConfig.targetPort) {
+		port = hostConfig.targetPort;
 	} else if (req._parsedUrl.port) {
 		port = req._parsedUrl.port;
 	} else if (req.headers.origin) {
@@ -128,11 +139,18 @@ function proxyMiddleware(req, res, next) {
 
 	proxyReq = _http2['default'].request(requestOptions, function (proxyRes) {
 		proxyRes.pause();
+
 		Object.keys(proxyRes.headers).forEach(function (hname) {
 			return res.removeHeader(hname);
 		});
 		res.setHeader('via', 'stuback');
+		if (hostConfig.responseHeaders) {
+			Object.keys(hostConfig.responseHeaders).forEach(function (header) {
+				proxyRes.headers[header.toLowerCase()] = hostConfig.responseHeaders[header];
+			});
+		}
 		res.writeHead(proxyRes.statusCode, proxyRes.headers);
+
 		if (options.isBacked) {
 			(function () {
 				var stubFileName = getStubFileName(req);
@@ -155,7 +173,7 @@ function proxyMiddleware(req, res, next) {
 				isStubbed: true,
 				isBacked: false,
 				isTampered: false,
-				passthrough: false
+				hostConfig: { passthrough: false }
 			};
 			stubMiddleware(req, res, next, _options);
 		} else {
@@ -183,7 +201,7 @@ function stubMiddleware(req, res, next) {
 	_fs2['default'].exists(stubFileName, function (exists) {
 		if (!exists) {
 			verbose && console.log('patterns didn\'t found response for %s(%s) -> (%s)', req.method, req.url, _path2['default'].basename(stubFileName));
-			if (options.passthrough) {
+			if (options.hostConfig.passthrough) {
 				return proxyMiddleware(req, res, next, options);
 			}
 			return next();
@@ -215,8 +233,8 @@ app.use('/proxy.pac', function (req, res, next) {
 
 // do the real job
 app.use(function (req, res, next) {
-	verbose && console.log('request received', req.originalUrl);
 	var hostKey = req._parsedUrl.hostname || 'localhost';
+	verbose && console.log('request received', hostKey, req.originalUrl);
 	if (!config[hostKey]) {
 		verbose && console.log('proxying call to %s', hostKey);
 		return proxyMiddleware(req, res, next);
@@ -234,9 +252,7 @@ app.use(function (req, res, next) {
 		isTampered: hostConfig.tampered.some(function (exp) {
 			return !!url.match(exp);
 		}),
-		targetHost: hostConfig.targetHost,
-		targetPort: hostConfig.targetPort,
-		passthrough: !!hostConfig.passthrough
+		hostConfig: hostConfig
 	};
 
 	if (middleWareOptions.isStubbed) {
