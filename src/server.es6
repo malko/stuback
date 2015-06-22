@@ -1,4 +1,4 @@
-/*jshint esnext:true, node: true */
+#!/usr/bin/env node
 'use strict';
 
 import connect from 'connect';
@@ -10,10 +10,58 @@ import mkdirp from 'mkdirp';
 import path from 'path';
 import pathToRegexp from 'path-to-regexp';
 
-import config from '../config.js';
+// cli parameters parsing
+const cliOpts = {
+	port: 3000,
+	config: 'config.js',
+	stubPaths: path.normalize(process.argv.pop() + '/'),
+	verbose: false
+};
+process.argv.forEach((arg, id) => {
+	var argValue = process.argv[id+1];
+	switch(arg){
+		case "-h":
+		case "--help":
+			console.log(
+`Stuback is a proxy server to ease api development.
+
+You can use Automatic proxy configuration at http://localhost:port/proxy.pac
+
+Usage:
+stuback [options] stubRootDir
+where stubRootDir arguments is the root directory to store your stubs.
+e.g.
+stuback -p 3000 -c config.js ./stubs
+
+Check the documentation at https://githube.com/stuback for more info about the config file.
+
+Options:
+-p,  --port		port to bind stuback on default to 3000
+-c, --config	config file to use default to ./config.js
+-v, --verbose	turn on verbosity
+-h, --help		this help
+`);
+			process.exit(0);
+			break;
+		case "-p":
+		case "--port":
+			cliOpts.port = argValue;
+			break;
+		case "-c":
+		case "--config":
+			cliOpts.config = argValue.match(/^\.?\//) ? argValue : './' + argValue;
+			break;
+		case "-v":
+		case "--verbose":
+			cliOpts.verbose = true;
+			break;
+	}
+});
+
+const config = require(path.normalize(process.cwd() + '/' + cliOpts.config));
 
 const portExp = /:\d+$/;
-const verbose = !!config.verbose;
+const verbose = !!cliOpts.verbose;
 const proxyRemovedHeaders = [
 	'host', 'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailer', 'transfer-encoding', 'upgrade'
 ];
@@ -21,8 +69,6 @@ const proxyBackupRemovedHeaders = [
 	'if-modified-since', // avoid getting 304 response on browser refresh
 	'accept-encoding' // we want human readable content
 ];
-
-var serverHttpPort = 3000;
 
 // map config paths to regexps
 Object.keys(config).forEach((hostKey) => {
@@ -39,7 +85,7 @@ function hashParams(v) {
 }
 
 function getStubFileName(req) {
-	return 'stubs/' + (req._parsedUrl.hostname || req._parsedUrl.host) + '/' + req.method.toLowerCase() + '-' +
+	return cliOpts.stubPaths + (req._parsedUrl.hostname || req._parsedUrl.host) + '/' + req.method.toLowerCase() + '-' +
 		(req._parsedUrl.path !== '/' ? encodeURIComponent(req._parsedUrl.path.replace(/^\//, '')) : '_' )+
 		(req.params ? hashParams(req.params) : '')
 	;
@@ -158,9 +204,9 @@ app.use('/proxy.pac', function(req, res, next){
 
 // do the real job
 app.use((req, res, next) => {
-	console.log('request received', req.originalUrl);
+	verbose && console.log('request received', req.originalUrl);
 	if (!config[req._parsedUrl.hostname]) {
-		console.log("proxying call to %s", req._parsedUrl.hostname);
+		verbose && console.log("proxying call to %s", req._parsedUrl.hostname);
 		return proxyMiddleware(req, res, next);
 	}
 
@@ -185,8 +231,8 @@ app.use((req, res, next) => {
 	}
 });
 
-var httpServer = http.createServer(app).listen(serverHttpPort);
+var httpServer = http.createServer(app).listen(cliOpts.port);
 // https.createServer(tlsOptions, app).listen(3001);
-console.log(`Stuback listening on port ${serverHttpPort}
-You can use Automatic proxy configuration at http://localhost:${serverHttpPort}/proxy.pac
+console.log(`Stuback listening on port ${cliOpts.port}
+You can use Automatic proxy configuration at http://localhost:${cliOpts.port}/proxy.pac
 `);

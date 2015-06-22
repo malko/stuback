@@ -7,6 +7,9 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "watch": "babel -w -o dist/server.js src/*.es6"
   },
+  "bin":{
+    "stuback": "dist/server.js"
+  },
   "keywords": [
     "stub",
     "proxy",

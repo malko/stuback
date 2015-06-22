@@ -1,4 +1,5 @@
-/*jshint esnext:true, node: true */
+#!/usr/bin/env node
+
 'use strict';
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
@@ -33,24 +34,50 @@ var _pathToRegexp = require('path-to-regexp');
 
 var _pathToRegexp2 = _interopRequireDefault(_pathToRegexp);
 
-var _configJs = require('../config.js');
+// cli parameters parsing
+var cliOpts = {
+	port: 3000,
+	config: 'config.js',
+	stubPaths: _path2['default'].normalize(process.argv.pop() + '/'),
+	verbose: false
+};
+process.argv.forEach(function (arg, id) {
+	var argValue = process.argv[id + 1];
+	switch (arg) {
+		case '-h':
+		case '--help':
+			console.log('Stuback is a proxy server to ease api development.\n\nYou can use Automatic proxy configuration at http://localhost:port/proxy.pac\n\nUsage:\nstuback [options] stubRootDir\nwhere stubRootDir arguments is the root directory to store your stubs.\ne.g.\nstuback -p 3000 -c config.js ./stubs\n\nCheck the documentation at https://githube.com/stuback for more info about the config file.\n\nOptions:\n-p,  --port\t\tport to bind stuback on default to 3000\n-c, --config\tconfig file to use default to ./config.js\n-v, --verbose\tturn on verbosity\n-h, --help\t\tthis help\n');
+			process.exit(0);
+			break;
+		case '-p':
+		case '--port':
+			cliOpts.port = argValue;
+			break;
+		case '-c':
+		case '--config':
+			cliOpts.config = argValue.match(/^\.?\//) ? argValue : './' + argValue;
+			break;
+		case '-v':
+		case '--verbose':
+			cliOpts.verbose = true;
+			break;
+	}
+});
 
-var _configJs2 = _interopRequireDefault(_configJs);
+var config = require(_path2['default'].normalize(process.cwd() + '/' + cliOpts.config));
 
 var portExp = /:\d+$/;
-var verbose = !!_configJs2['default'].verbose;
+var verbose = !!cliOpts.verbose;
 var proxyRemovedHeaders = ['host', 'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailer', 'transfer-encoding', 'upgrade'];
 var proxyBackupRemovedHeaders = ['if-modified-since', // avoid getting 304 response on browser refresh
 'accept-encoding' // we want human readable content
 ];
 
-var serverHttpPort = 3000;
-
 // map config paths to regexps
-Object.keys(_configJs2['default']).forEach(function (hostKey) {
-	_configJs2['default'][hostKey].stubs && (_configJs2['default'][hostKey].stubs = _configJs2['default'][hostKey].stubs.map(_pathToRegexp2['default']));
-	_configJs2['default'][hostKey].backed && (_configJs2['default'][hostKey].backed = _configJs2['default'][hostKey].backed.map(_pathToRegexp2['default']));
-	_configJs2['default'][hostKey].tampered && (_configJs2['default'][hostKey].tampered = _configJs2['default'][hostKey].tampered.map(_pathToRegexp2['default']));
+Object.keys(config).forEach(function (hostKey) {
+	config[hostKey].stubs && (config[hostKey].stubs = config[hostKey].stubs.map(_pathToRegexp2['default']));
+	config[hostKey].backed && (config[hostKey].backed = config[hostKey].backed.map(_pathToRegexp2['default']));
+	config[hostKey].tampered && (config[hostKey].tampered = config[hostKey].tampered.map(_pathToRegexp2['default']));
 });
 
 function hashParams(v) {
@@ -61,7 +88,7 @@ function hashParams(v) {
 }
 
 function getStubFileName(req) {
-	return 'stubs/' + (req._parsedUrl.hostname || req._parsedUrl.host) + '/' + req.method.toLowerCase() + '-' + (req._parsedUrl.path !== '/' ? encodeURIComponent(req._parsedUrl.path.replace(/^\//, '')) : '_') + (req.params ? hashParams(req.params) : '');
+	return cliOpts.stubPaths + (req._parsedUrl.hostname || req._parsedUrl.host) + '/' + req.method.toLowerCase() + '-' + (req._parsedUrl.path !== '/' ? encodeURIComponent(req._parsedUrl.path.replace(/^\//, '')) : '_') + (req.params ? hashParams(req.params) : '');
 }
 
 function proxyMiddleware(req, res, next) {
@@ -176,8 +203,8 @@ app.use('/proxy.pac', function (req, res, next) {
 	console.log('serving PAC for %s', req.connection.remoteAddress);
 	var address = httpServer.address();
 	var localAddress = (address.address.match(/^(|::)$/) ? '127.0.0.1' : address.address) + ':' + address.port;
-	var pacConfig = Object.keys(_configJs2['default']).map(function (hostKey) {
-		var direct = _configJs2['default'][hostKey].passthrough ? '; DIRECT' : '';
+	var pacConfig = Object.keys(config).map(function (hostKey) {
+		var direct = config[hostKey].passthrough ? '; DIRECT' : '';
 		return 'if (shExpMatch(host, \'' + hostKey + '\')) return \'PROXY ' + localAddress + '' + direct + '\';';
 	}).join('\n\t');
 	res.setHeader('Content-Type', 'application/x-ns-proxy-autoconfig');
@@ -186,13 +213,13 @@ app.use('/proxy.pac', function (req, res, next) {
 
 // do the real job
 app.use(function (req, res, next) {
-	console.log('request received', req.originalUrl);
-	if (!_configJs2['default'][req._parsedUrl.hostname]) {
-		console.log('proxying call to %s', req._parsedUrl.hostname);
+	verbose && console.log('request received', req.originalUrl);
+	if (!config[req._parsedUrl.hostname]) {
+		verbose && console.log('proxying call to %s', req._parsedUrl.hostname);
 		return proxyMiddleware(req, res, next);
 	}
 
-	var hostConfig = _configJs2['default'][req._parsedUrl.hostname],
+	var hostConfig = config[req._parsedUrl.hostname],
 	    url = req._parsedUrl.path,
 	    middleWareOptions = {
 		isStubbed: hostConfig.stubs.some(function (exp) {
@@ -218,6 +245,6 @@ app.use(function (req, res, next) {
 	}
 });
 
-var httpServer = _http2['default'].createServer(app).listen(serverHttpPort);
+var httpServer = _http2['default'].createServer(app).listen(cliOpts.port);
 // https.createServer(tlsOptions, app).listen(3001);
-console.log('Stuback listening on port ' + serverHttpPort + '\nYou can use Automatic proxy configuration at http://localhost:' + serverHttpPort + '/proxy.pac\n');
+console.log('Stuback listening on port ' + cliOpts.port + '\nYou can use Automatic proxy configuration at http://localhost:' + cliOpts.port + '/proxy.pac\n');
