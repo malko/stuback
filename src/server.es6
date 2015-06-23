@@ -117,7 +117,7 @@ function proxyMiddleware(req, res, next, options = {}) {
 		cacheStream
 	;
 	options.isBacked && removedHeaders.push(...proxyBackupRemovedHeaders);
-	removeHeadersExp = new RegExp(`^${removedHeaders.join('|')}$`);
+	removeHeadersExp = new RegExp(`^(${removedHeaders.join('|')})$`);
 	Object.keys(req.headers).forEach((header) => {
 		header.match(removeHeadersExp) || (requestOptions.headers[header] = req.headers[header]);
 	});
