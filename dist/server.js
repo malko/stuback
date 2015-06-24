@@ -148,7 +148,11 @@ function proxyMiddleware(req, res, next) {
 		res.setHeader('via', 'stuback');
 		if (hostConfig.responseHeaders) {
 			Object.keys(hostConfig.responseHeaders).forEach(function (header) {
-				proxyRes.headers[header.toLowerCase()] = hostConfig.responseHeaders[header];
+				if (hostConfig.responseHeaders[header]) {
+					proxyRes.headers[header.toLowerCase()] = hostConfig.responseHeaders[header];
+				} else {
+					delete proxyRes.headers[header.toLowerCase()];
+				}
 			});
 		}
 		res.writeHead(proxyRes.statusCode, proxyRes.headers);
