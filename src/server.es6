@@ -10,28 +10,20 @@ import mkdirp from 'mkdirp';
 import path from 'path';
 import pathToRegexp from 'path-to-regexp';
 
-const portExp = /:\d+$/;
-const proxyRemovedHeaders = [
+const USERDIR = process.env[(process.platform == 'win32') ? 'USERPROFILE' : 'HOME'];
+const PORTEXP = /:\d+$/;
+// a proxy should always remove thoose headers
+const PROXYREMOVEDHEADERS = [
 	'host', 'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailer', 'transfer-encoding', 'upgrade'
-];
-const proxyBackupRemovedHeaders = [
+]; //@FIXME the headers names in th connection header should be removed too.
+// some header we want to remove to control when we want to create a backup copy of the response
+const PROXYBACKUPREMOVEDHEADERS = [
 	'if-modified-since', // avoid getting 304 response on browser refresh
 	'accept-encoding' // we want human readable content
 ];
 
-//-- cli parameters parsing
-const cliOpts = {
-	port: 3000,
-	config: 'config.js',
-	stubPaths: path.normalize(process.argv[process.argv.length - 1] + '/'),
-	verbose: false
-};
-process.argv.forEach((arg, id) => {
-	var argValue = process.argv[id + 1];
-	switch (arg) {
-		case '-h':
-		case '--help':
-			console.log(
+const HELP_MESSAGE = (exitCode) => {
+	console.log(
 `Stuback is a proxy server to ease api development.
 
 You can use Automatic proxy configuration at http://localhost:port/proxy.pac
@@ -49,28 +41,76 @@ Options:
 -c, --config	config file to use default to ./config.js
 -v, --verbose	turn on verbosity
 -h, --help		this help
-`);
-			process.exit(0);
+`
+	);
+	process.exit(exitCode);
+};
+
+const DEFAULT_CONFIG = `module.exports = {
+	'localhost': {
+		passthrough: true, // if yes will proxy request that are not stubed, backed or tampered
+		stubs: [], // list of path to use stubs for
+		backed: [], // list of path to automaticly backup and send as stub if the remote server doesn't respond
+		tampered: [], // not functionnal for now will handle path where you want to modify request and response on the fly
+		targetHost: false, // optional value to redirect request to another host than the one passed in
+		targetPort: false // optional value to redirect request to another port than the one requested
+	}
+};`;
+
+//----- CLI PARAMETERS PARSING -----//
+if (process.argv.length <= 2) {
+	HELP_MESSAGE(1);
+}
+const CLIOPTS = {
+	port: 3000,
+	config: false,
+	stubsPath: false,
+	verbose: false
+};
+process.argv.forEach((arg, id) => {
+	var argValue = process.argv[id + 1];
+	switch (arg) {
+		case '-h':
+		case '--help':
+			HELP_MESSAGE(0);
 			break;
 		case '-p':
 		case '--port':
-			cliOpts.port = argValue;
+			CLIOPTS.port = argValue;
 			break;
 		case '-c':
 		case '--config':
-			cliOpts.config = argValue.match(/^\.?\//) ? argValue : './' + argValue;
+			CLIOPTS.config = argValue.match(/^\.?\//) ? argValue : './' + argValue;
 			break;
 		case '-v':
 		case '--verbose':
-			cliOpts.verbose = true;
+			CLIOPTS.verbose = true;
+			break;
+		case '-s':
+		case '--stubs':
+			CLIOPTS.stubsPath = path.normalize(argValue + '/');
 			break;
 	}
 });
 
-const verbose = !!cliOpts.verbose;
+const VERBOSE = !!CLIOPTS.verbose;
 
-//-- load configuration file and watch it for change
-var configPath = require.resolve(path.normalize(cliOpts.config[0] === '/' ? cliOpts.config : (process.cwd() + '/' + cliOpts.config)));
+if (!CLIOPTS.stubsPath) {
+	console.error('--stubs parameter is required');
+	HELP_MESSAGE(1);
+}
+
+//----- LOAD CONFIGURATION FILE AND WATCH IT FOR CHANGE -----//
+if (!CLIOPTS.config) { // use default configuration path and init config file if needed
+	CLIOPTS.config = path.normalize(USERDIR + '/.stuback.js');
+	try {
+		fs.readFileSync(CLIOPTS.config);
+	} catch (e) {
+		console.log('create default config file at %s', CLIOPTS.config);
+		fs.writeFileSync(CLIOPTS.config, DEFAULT_CONFIG);
+	}
+}
+var configPath = require.resolve(path.normalize(CLIOPTS.config[0] === '/' ? CLIOPTS.config : (process.cwd() + '/' + CLIOPTS.config)));
 var config;
 function loadConfig() {
 	delete require.cache[configPath];
@@ -87,6 +127,11 @@ function loadConfig() {
 loadConfig();
 fs.watch(configPath, loadConfig);
 
+/**
+ * return a basic hash of the object passed in
+ * @param {Object} v object to get hash for
+ * @return {string} a hash of the given object
+ */
 function hashParams(v) {
 	if (!(v.length || Object.keys(v).length)) {
 		return '';
@@ -94,49 +139,66 @@ function hashParams(v) {
 	return '-' + crypto.createHash('md5').update(JSON.stringify(v)).digest('hex');
 }
 
+/**
+ * return the path of stub file based on a corresponding request object
+ * @param {httpRequest} req the server incoming request to get stub filename for
+ * @return {string} the stub path corresponding to this httpRequest
+ */
 function getStubFileName(req) {
-	return cliOpts.stubPaths + (req._parsedUrl.hostname || req._parsedUrl.host || 'localhost') + '/' + req.method.toLowerCase() + '-' +
+	return CLIOPTS.stubsPath + (req._parsedUrl.hostname || req._parsedUrl.host || 'localhost') + '/' + req.method.toLowerCase() + '-' +
 		(req._parsedUrl.path !== '/' ? encodeURIComponent(req._parsedUrl.path.replace(/^\//, '')) : '_') +
 		(req.params ? hashParams(req.params) : '')
 	;
 }
 
+/**
+ * This is the real proxy logic middleware
+ * It is not use as a direct middleware but rather called by the main stuback middleware
+ * @param {httpRequest} req the request received by the main stuback middleware
+ * @param {httpResponse} res the response used to by the main stuback middleware to reply to the connected client
+ * @param {Function} next the next method to call next connect middleware in the main middleware
+ * @param {*} options = {} contains the hostConfig options + some boolean values about the way the middleware should work (isBacked mainly)
+ */
 function proxyMiddleware(req, res, next, options = {}) {
 	req.pause();
-	var hostConfig = options.hostConfig || {},
+	let hostConfig = options.hostConfig || {},
 		requestOptions = {
 			hostname: hostConfig.targetHost || req._parsedUrl.hostname || req._parsedUrl.host || req.headers.host.replace(/:\d+$/, ''),
 			path: req._parsedUrl.path,
 			method: req.method,
 			headers: {'X-Forwarded-For': req.connection.remoteAddress}
 		},
-		removedHeaders = proxyRemovedHeaders.slice(),
+		removedHeaders = PROXYREMOVEDHEADERS.slice(),
 		removeHeadersExp,
 		port,
 		proxyReq,
 		cacheStream
 	;
-	options.isBacked && removedHeaders.push(...proxyBackupRemovedHeaders);
+
+	//- prepare request headers to proxyRequest and remove unwanted ones
+	options.isBacked && removedHeaders.push(...PROXYBACKUPREMOVEDHEADERS);
 	removeHeadersExp = new RegExp(`^(${removedHeaders.join('|')})$`);
 	Object.keys(req.headers).forEach((header) => {
 		header.match(removeHeadersExp) || (requestOptions.headers[header] = req.headers[header]);
 	});
 
+	//- check request port settings
 	if (hostConfig.targetPort) {
 		port = hostConfig.targetPort;
 	} else if (req._parsedUrl.port) {
 		port = req._parsedUrl.port;
 	} else if (req.headers.origin) {
-		req.headers.origin.replace(portExp, (m, p) => port = p);
+		req.headers.origin.replace(PORTEXP, (m, p) => port = p);
 	}
-
 	port && (requestOptions.port = port);
 
-	verbose && console.log('proxying to %s(http://%s:%s%s)', requestOptions.method, requestOptions.hostname, requestOptions.port || 80, requestOptions.path);
+	VERBOSE && console.log('proxying to %s(http://%s:%s%s)', requestOptions.method, requestOptions.hostname, requestOptions.port || 80, requestOptions.path);
 
+	//- launch the proxyRequest
 	proxyReq = http.request(requestOptions, (proxyRes) => {
 		proxyRes.pause();
 
+		//- copy proxyResponse headers to clientResponse, replacing and removing unwanted ones as set in hostConfig
 		Object.keys(proxyRes.headers).forEach((hname) => res.removeHeader(hname));
 		res.setHeader('via', 'stuback');
 		if (hostConfig.responseHeaders) {
@@ -150,20 +212,24 @@ function proxyMiddleware(req, res, next, options = {}) {
 		}
 		res.writeHead(proxyRes.statusCode, proxyRes.headers);
 
+		//- manage backup copy if necessary
 		if (options.isBacked) {
 			let stubFileName = getStubFileName(req);
 			let stubDirname = path.dirname(stubFileName);
 			fs.existsSync(stubDirname) || mkdirp.sync(stubDirname);
 			cacheStream = fs.createWriteStream(stubFileName);
 			cacheStream.on('close', () => {
-				verbose && console.log('backed in %s', stubFileName);
+				VERBOSE && console.log('backed in %s', stubFileName);
 			});
 			proxyRes.pipe(cacheStream);
 		}
+
+		//- pipe the proxyResponse content to the clientResponse;
 		proxyRes.pipe(res);
 		proxyRes.resume();
 	});
 
+	//- on proxy error we need to either try to return a stub or pass to the connect middleware
 	proxyReq.on('error', (err) => {
 		if (options.isBacked) {
 			let _options = {
@@ -176,44 +242,45 @@ function proxyMiddleware(req, res, next, options = {}) {
 		} else {
 			next(err);
 		}
-		console.log('errr', err);
+		VERBOSE && console.error('ERROR', err);
 	});
 
-	res.on('finished', () => {
-		// cacheStream.end();
-		console.log('send response %s', res);
-	});
-
+	//- finaly piping clientReqest body to proxyRequest
 	req.pipe(proxyReq);
 	req.resume();
 }
 
+/**
+ * This middleware should return the stubbed content if any for the given request.
+ * Regarding the hostConfig passthrough settings will wall the remote server if a stub file is not présent.
+ * @param {httpRequest} req the request received by the main stuback middleware
+ * @param {httpResponse} res the response used to by the main stuback middleware to reply to the connected client
+ * @param {Function} next the next method to call next connect middleware in the main middleware
+ * @param {*} options = {} contains the hostConfig options + some boolean values about the way the middleware should work
+ */
 function stubMiddleware(req, res, next, options = {}) {
 	let stubFileName = getStubFileName(req);
 
-	verbose && console.log('pattern searching for %s(%s)', req.method, req._parsedUrl.path);
+	VERBOSE && console.log('pattern searching for %s(%s)', req.method, req._parsedUrl.path);
 
 	fs.exists(stubFileName, function (exists) {
 		if (!exists) {
-			verbose && console.log('patterns didn\'t found response for %s(%s) -> (%s)', req.method, req.url, path.basename(stubFileName));
+			VERBOSE && console.log('patterns didn\'t found response for %s(%s) -> (%s)', req.method, req.url, path.basename(stubFileName));
 			if (options.hostConfig.passthrough) {
 				return proxyMiddleware(req, res, next, options);
 			}
 			return next();
 		}
-		verbose && console.log('Reply with get/%s', path.basename(stubFileName));
+		VERBOSE && console.log('Reply with get/%s', path.basename(stubFileName));
 		let stub = fs.createReadStream(stubFileName);
 		stub.pipe(res);
 	});
 }
 
+//----- STUBACK CONNECT APPLICATION -----//
 var app = connect();
-// var tlsOptions = {
-// 	key:    fs.readFileSync(__dirname + '/../key.pem'),
-// 	cert:   fs.readFileSync(__dirname + '/../cert.pem')
-// };
 
-// proxy auto config generation
+//-- proxy auto config generation
 app.use('/proxy.pac', function (req, res, next) {
 	console.log('serving PAC for %s', req.connection.remoteAddress);
 	let address = httpServer.address();
@@ -226,15 +293,18 @@ app.use('/proxy.pac', function (req, res, next) {
 	res.end(`function FindProxyForURL(url, host) {\n\t${pacConfig}\n\treturn "DIRECT";\n}`);
 });
 
-// do the real job
+//-- do the real job
 app.use((req, res, next) => {
 	let hostKey = req._parsedUrl.hostname || 'localhost';
-	verbose && console.log('request received', hostKey, req.originalUrl);
+	VERBOSE && console.log('request received', hostKey, req.originalUrl);
+
+	//- if no hostConfig be a basic proxy
 	if (!config[hostKey]) {
-		verbose && console.log('proxying call to %s', hostKey);
+		VERBOSE && console.log('proxying call to %s', hostKey);
 		return proxyMiddleware(req, res, next);
 	}
 
+	//- augment hostConfig with some values
 	let hostConfig = config[hostKey],
 		url = req._parsedUrl.path,
 		middleWareOptions = {
@@ -245,6 +315,7 @@ app.use((req, res, next) => {
 		}
 	;
 
+	//- adopt the strategy corresponding to hostConfig
 	if (middleWareOptions.isStubbed) {
 		stubMiddleware(req, res, next, middleWareOptions);
 	} else if (middleWareOptions.isBacked) {
@@ -256,8 +327,8 @@ app.use((req, res, next) => {
 	}
 });
 
-var httpServer = http.createServer(app).listen(cliOpts.port);
-// https.createServer(tlsOptions, app).listen(3001);
-console.log(`Stuback listening on port ${cliOpts.port}
-You can use Automatic proxy configuration at http://localhost:${cliOpts.port}/proxy.pac
+//----- FINALLY START THE STUBACK SERVER -----//
+var httpServer = http.createServer(app).listen(CLIOPTS.port);
+console.log(`Stuback listening on port ${CLIOPTS.port}
+You can use Automatic proxy configuration at http://localhost:${CLIOPTS.port}/proxy.pac
 `);
