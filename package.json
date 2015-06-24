@@ -1,6 +1,6 @@
 {
   "name": "stuback",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "proxy server to easily stub your apis and evenutally back your developpment server",
   "main": "server.js",
   "scripts": {
