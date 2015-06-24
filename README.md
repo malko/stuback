@@ -8,10 +8,11 @@ npm install -g stuback
 
 launch the server like this
 ```
-stuback -p 3000 -c config.js ./stubs
+stuback -p 3000 -c config.js -s ./stubs
 ```
 
-see sample config file for now for more info about configuration.
+See sample config file for now for more info about configuration.
+The config file will be watched for changes so you can edit without reloading the server.
 
 ## How to work with stuback?
 
@@ -27,12 +28,16 @@ You can direct your application api calls to localhost or any other address your
 ```
 module.exports = {
 	localhost: {
-		targetHost: 'mydevelopmentserver.net',
-		targetPort: '8080',
-		passthrough: true,
-		stubs: ['/api/*'],
-		backed: ['/api/*'],
-		tampered: []
+		targetHost: 'mydevelopmentserver.net', // optional server to redirect request to
+		targetPort: '8080', // optional port to redirect request to
+		passthrough: true, // true is certainly what you want, if false you will get an error on not stubbed or backed urls
+		stubs: ['/api/*'], // a list of patterns (as in connect / express) of urls to stubs
+		backed: ['/api/*'], // a list of patterns to keep backup in case of remote server not responding
+		tampered: [], // this is not used at this time
+		responseHeaders: { // list of headers to add to proxyed response, will be removed if falsy
+			'Access-Control-Allow-Origin': '*',
+			'WWW-Authenticate': false
+		}
 	}
 }
 ```
@@ -40,3 +45,16 @@ module.exports = {
 This has the advantage of not modifying your browser or system proxy settings and so you won't have to reset them on configuration change.
 The bad part is you need your code base to direct request to the proxy directly.
 This method is prefered when your application can use different hosts depending on env settings for example.
+
+### Where to put my stubs
+stubs will be organised and looked-up in the following way:
+```
+/stubs
+	|_ hostname
+	 	|_ [lowercase_http_verb]-encodeURIComponent(pathUrl)-md5(parameters)
+```
+use the --verbose option to see which files stuback is trying to reach, so you can easily copy/paste names to create new stubs files.
+
+### This is for the DEV
+Stuback is in no way intended to be used for anything else than development.
+I use stuback for my daily needs and i'll be happy if it can help you in your job. As always, feature request, contributions(code, documentation or logo) and bug reporting are more than welcome.

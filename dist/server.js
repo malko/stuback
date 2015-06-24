@@ -44,7 +44,7 @@ var PROXYBACKUPREMOVEDHEADERS = ['if-modified-since', // avoid getting 304 respo
 ];
 
 var HELP_MESSAGE = function HELP_MESSAGE(exitCode) {
-	console.log('Stuback is a proxy server to ease api development.\n\nYou can use Automatic proxy configuration at http://localhost:port/proxy.pac\n\nUsage:\nstuback [options] stubRootDir\nwhere stubRootDir arguments is the root directory to store your stubs.\ne.g.\nstuback -p 3000 -c config.js ./stubs\n\nCheck the documentation at https://githube.com/stuback for more info about the config file.\n\nOptions:\n-p,  --port\t\tport to bind stuback on default to 3000\n-c, --config\tconfig file to use default to ./config.js\n-v, --verbose\tturn on verbosity\n-h, --help\t\tthis help\n');
+	console.log('Stuback is a proxy server to ease api development.\n\nYou can use Automatic proxy configuration at http://localhost:port/proxy.pac\n\nUsage:\nstuback [options] --stubs stubRootDir\nwhere stubRootDir arguments is the root directory to store your stubs.\ne.g.\nstuback -p 3000 -c stuback.js ./stubs\n\nCheck the documentation at https://github.com/stuback for more info about the config file.\n\nOptions:\n-c, --config    config file to use default to USERDIR/.stuback.js\n                will create one if none exists\n-h, --help      display this help\n-p, --port      port to bind stuback on default to 3000\n-s, --stubs     root directory of your stubs files (required)\n-v, --verbose   turn on verbosity\n');
 	process.exit(exitCode);
 };
 

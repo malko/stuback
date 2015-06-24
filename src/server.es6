@@ -29,18 +29,20 @@ const HELP_MESSAGE = (exitCode) => {
 You can use Automatic proxy configuration at http://localhost:port/proxy.pac
 
 Usage:
-stuback [options] stubRootDir
+stuback [options] --stubs stubRootDir
 where stubRootDir arguments is the root directory to store your stubs.
 e.g.
-stuback -p 3000 -c config.js ./stubs
+stuback -p 3000 -c stuback.js ./stubs
 
-Check the documentation at https://githube.com/stuback for more info about the config file.
+Check the documentation at https://github.com/stuback for more info about the config file.
 
 Options:
--p,  --port		port to bind stuback on default to 3000
--c, --config	config file to use default to ./config.js
--v, --verbose	turn on verbosity
--h, --help		this help
+-c, --config    config file to use default to USERDIR/.stuback.js
+                will create one if none exists
+-h, --help      display this help
+-p, --port      port to bind stuback on default to 3000
+-s, --stubs     root directory of your stubs files (required)
+-v, --verbose   turn on verbosity
 `
 	);
 	process.exit(exitCode);
