@@ -261,19 +261,29 @@ function proxyMiddleware(req, res, next) {
 function stubMiddleware(req, res, next) {
 	var options = arguments[3] === undefined ? {} : arguments[3];
 
-	var stubFileName = getStubFileName(req);
+	var stubFileName = getStubFileName(req),
+	    hostConfig = options.hostConfig;
 
 	VERBOSE && console.log('pattern searching for %s(%s)', req.method, req._parsedUrl.path);
 
 	_fs2['default'].exists(stubFileName, function (exists) {
 		if (!exists) {
 			VERBOSE && console.log('patterns didn\'t found response for %s(%s) -> (%s)', req.method, req.url, _path2['default'].basename(stubFileName));
-			if (options.hostConfig.passthrough) {
+			if (hostConfig.passthrough) {
 				return proxyMiddleware(req, res, next, options);
 			}
 			return next();
 		}
 		VERBOSE && console.log('Reply with get/%s', _path2['default'].basename(stubFileName));
+		if (hostConfig.responseHeaders) {
+			Object.keys(hostConfig.responseHeaders).forEach(function (header) {
+				if (hostConfig.responseHeaders[header]) {
+					res.setHeader(header, hostConfig.responseHeaders[header]);
+				} else {
+					res.removeHeader(header);
+				}
+			});
+		}
 		var stub = _fs2['default'].createReadStream(stubFileName);
 		stub.pipe(res);
 	});
