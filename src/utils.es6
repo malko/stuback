@@ -1,6 +1,8 @@
 import pathToRegexp from 'path-to-regexp';
 import crypto from 'crypto';
 
+const IGNORED_PATH = ['responseHeaders'];
+
 /**
  * return a basic hash of the object passed in
  * @param {Object} v object to get hash for
@@ -32,26 +34,32 @@ function normalizeHostConfig(hostConfig) {
 }
 
 function normalizeHostConfigSection(hostConfig, section) {
-	(section in hostConfig) && Object.keys(hostConfig[section]).forEach((path) => {
-		if (typeof hostConfig[section][path] !== 'object') {
-			hostConfig[section][path] = {use: !!hostConfig[section][path]};
-		}
-		if (hostConfig[section][path].use === false) {
-			return;
-		}
-		hostConfig[section][path].use = true;
-		hostConfig[section][path].exp = pathToRegexp(path);
-	});
+	(section in hostConfig) && Object.keys(hostConfig[section])
+		.filter((path) => !~IGNORED_PATH.indexOf(path)) // jshint ignore:line
+		.forEach((path) => {
+			if (typeof hostConfig[section][path] !== 'object') {
+				hostConfig[section][path] = {use: !!hostConfig[section][path]};
+			}
+			if (hostConfig[section][path].use === false) {
+				return;
+			}
+			hostConfig[section][path].use = true;
+			hostConfig[section][path].exp = pathToRegexp(path);
+		})
+	;
 }
 
 function applyResponseHeaders(res, headers) {
-	headers && Object.keys(headers).forEach((header) => {
-		if (headers[header]) {
-			res.setHeader(header, headers[header]);
-		} else {
-			res.removeHeader(header);
-		}
-	});
+	headers && Object.keys(headers)
+		.filter((path) => !~IGNORED_PATH.indexOf(path)) // jshint ignore:line
+		.forEach((header) => {
+			if (headers[header]) {
+				res.setHeader(header, headers[header]);
+			} else {
+				res.removeHeader(header);
+			}
+		})
+	;
 }
 
 function applyIncomingMessageHeaders(incoming, headers) {

@@ -7,7 +7,7 @@ import http from 'http';
 // import https from 'https';
 import path from 'path';
 import mkdirp from 'mkdirp';
-import utils from './utils'
+import utils from './utils';
 
 const USERDIR = process.env[(process.platform == 'win32') ? 'USERPROFILE' : 'HOME'];
 const PORTEXP = /:\d+$/;

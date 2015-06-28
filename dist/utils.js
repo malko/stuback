@@ -14,6 +14,8 @@ var _crypto = require('crypto');
 
 var _crypto2 = _interopRequireDefault(_crypto);
 
+var IGNORED_PATH = ['responseHeaders'];
+
 /**
  * return a basic hash of the object passed in
  * @param {Object} v object to get hash for
@@ -42,7 +44,10 @@ function normalizeHostConfig(hostConfig) {
 }
 
 function normalizeHostConfigSection(hostConfig, section) {
-	section in hostConfig && Object.keys(hostConfig[section]).forEach(function (path) {
+	section in hostConfig && Object.keys(hostConfig[section]).filter(function (path) {
+		return ! ~IGNORED_PATH.indexOf(path);
+	}) // jshint ignore:line
+	.forEach(function (path) {
 		if (typeof hostConfig[section][path] !== 'object') {
 			hostConfig[section][path] = { use: !!hostConfig[section][path] };
 		}
@@ -55,7 +60,10 @@ function normalizeHostConfigSection(hostConfig, section) {
 }
 
 function applyResponseHeaders(res, headers) {
-	headers && Object.keys(headers).forEach(function (header) {
+	headers && Object.keys(headers).filter(function (path) {
+		return ! ~IGNORED_PATH.indexOf(path);
+	}) // jshint ignore:line
+	.forEach(function (header) {
 		if (headers[header]) {
 			res.setHeader(header, headers[header]);
 		} else {
