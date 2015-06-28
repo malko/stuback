@@ -214,7 +214,7 @@ function proxyMiddleware(req, res, next) {
 
 /**
  * This middleware should return the stubbed content if any for the given request.
- * Regarding the hostConfig passthrough settings will wall the remote server if a stub file is not présent.
+ * Regarding the hostConfig passthrough settings will call the remote server if a stub file is not présent.
  * @param {httpRequest} req the request received by the main stuback middleware
  * @param {httpResponse} res the response used to by the main stuback middleware to reply to the connected client
  * @param {Function} next the next method to call next connect middleware in the main middleware
