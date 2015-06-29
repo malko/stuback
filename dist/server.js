@@ -173,8 +173,11 @@ function proxyMiddleware(req, res, next) {
 	//- launch the proxyRequest
 	proxyReq = _http2['default'].request(requestOptions, function (proxyRes) {
 		proxyRes.pause();
-
-		console.log('PROXY RES', proxyRes.statusCode);
+		// check for backed status code
+		if (hostConfig.backed && hostConfig.backed[options.backedBy] && hostConfig.backed[options.backedBy].onStatusCode && ~hostConfig.backed[options.backedBy].onStatusCode.indexOf(proxyRes.statusCode)) {
+			proxyRes.resume();
+			return onError('backedStatusCode');
+		}
 
 		//- copy proxyResponse headers to clientResponse, replacing and removing unwanted ones as set in hostConfig
 		Object.keys(proxyRes.headers).forEach(function (hname) {

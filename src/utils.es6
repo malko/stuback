@@ -35,7 +35,7 @@ function normalizeHostConfig(hostConfig) {
 
 function normalizeHostConfigSection(hostConfig, section) {
 	(section in hostConfig) && Object.keys(hostConfig[section])
-		.filter((path) => !~IGNORED_PATH.indexOf(path)) // jshint ignore:line
+		.filter((path) => !~IGNORED_PATH.indexOf(path))
 		.forEach((path) => {
 			if (typeof hostConfig[section][path] !== 'object') {
 				hostConfig[section][path] = {use: !!hostConfig[section][path]};
@@ -51,7 +51,7 @@ function normalizeHostConfigSection(hostConfig, section) {
 
 function applyResponseHeaders(res, headers) {
 	headers && Object.keys(headers)
-		.filter((path) => !~IGNORED_PATH.indexOf(path)) // jshint ignore:line
+		.filter((path) => !~IGNORED_PATH.indexOf(path))
 		.forEach((header) => {
 			if (headers[header]) {
 				res.setHeader(header, headers[header]);

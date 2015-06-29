@@ -179,8 +179,14 @@ function proxyMiddleware(req, res, next, options = {}) {
 	//- launch the proxyRequest
 	proxyReq = http.request(requestOptions, (proxyRes) => {
 		proxyRes.pause();
-
-		console.log('PROXY RES', proxyRes.statusCode);
+		// check for backed status code
+		if (hostConfig.backed && hostConfig.backed[options.backedBy]
+			&& hostConfig.backed[options.backedBy].onStatusCode
+			&& ~hostConfig.backed[options.backedBy].onStatusCode.indexOf(proxyRes.statusCode)
+		) {
+			proxyRes.resume();
+			return onError('backedStatusCode');
+		}
 
 		//- copy proxyResponse headers to clientResponse, replacing and removing unwanted ones as set in hostConfig
 		Object.keys(proxyRes.headers).forEach((hname) => res.removeHeader(hname));
