@@ -114,6 +114,7 @@ if (!CLIOPTS.config) { // use default configuration path and init config file if
 var configPath = require.resolve(path.normalize(CLIOPTS.config[0] === '/' ? CLIOPTS.config : (process.cwd() + '/' + CLIOPTS.config)));
 var config;
 function loadConfig() {
+	VERBOSE && console.log('loading config');
 	delete require.cache[configPath];
 	config = require(configPath);
 	// map config paths to regexps
@@ -180,12 +181,13 @@ function proxyMiddleware(req, res, next, options = {}) {
 	proxyReq = http.request(requestOptions, (proxyRes) => {
 		proxyRes.pause();
 		// check for backed status code
-		if (hostConfig.backed && hostConfig.backed[options.backedBy]
-			&& hostConfig.backed[options.backedBy].onStatusCode
-			&& ~hostConfig.backed[options.backedBy].onStatusCode.indexOf(proxyRes.statusCode)
+		if (options.backedBy
+			&& ((hostConfig.backed.onStatusCode && ~hostConfig.backed.onStatusCode.indexOf(proxyRes.statusCode))
+					|| (hostConfig.backed[options.backedBy].onStatusCode && ~hostConfig.backed[options.backedBy].onStatusCode.indexOf(proxyRes.statusCode))
+				)
 		) {
 			proxyRes.resume();
-			return onError('backedStatusCode');
+			return onError('Status code rejection');
 		}
 
 		//- copy proxyResponse headers to clientResponse, replacing and removing unwanted ones as set in hostConfig

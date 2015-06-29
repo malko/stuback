@@ -3,5 +3,7 @@
 	"esnext": true,
 	"expr": true,
 	"laxbreak" : true,
-	"node": true
+	"node": true,
+	"unused": true,
+	"undef": true
 }

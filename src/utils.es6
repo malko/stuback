@@ -1,7 +1,7 @@
 import pathToRegexp from 'path-to-regexp';
 import crypto from 'crypto';
 
-const IGNORED_PATH = ['responseHeaders'];
+const IGNORED_PATH = ['responseHeaders', 'onStatusCode'];
 
 /**
  * return a basic hash of the object passed in
@@ -51,7 +51,6 @@ function normalizeHostConfigSection(hostConfig, section) {
 
 function applyResponseHeaders(res, headers) {
 	headers && Object.keys(headers)
-		.filter((path) => !~IGNORED_PATH.indexOf(path))
 		.forEach((header) => {
 			if (headers[header]) {
 				res.setHeader(header, headers[header]);
@@ -71,10 +70,13 @@ function applyIncomingMessageHeaders(incoming, headers) {
 
 function pathMatchingLookup(url, typeConfig) {
 	let path;
-	return (typeConfig && Object.keys(typeConfig).some((_path) => {
-		path = _path;
-		return typeConfig[path].use && url.match(typeConfig[path].exp);
-	})) ? path : false;
+	return (typeConfig && Object.keys(typeConfig)
+		.filter((path) => !~IGNORED_PATH.indexOf(path))
+		.some((_path) => {
+			path = _path;
+			return typeConfig[path].use && url.match(typeConfig[path].exp);
+		})) ? path : false
+	;
 }
 
 export default {hashParams, getStubFileName, normalizeHostConfig, applyResponseHeaders, applyIncomingMessageHeaders, pathMatchingLookup};

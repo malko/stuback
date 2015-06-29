@@ -104,11 +104,14 @@ module.exports = {
 				// *backedStatusCode* is a list of remote server statusCode you want to
 				// consider erroneous. So the actual stub file will be returned instead
 				// if the server respond with one of the given codes
-				onStatusCode: [404, 500],
+				onStatusCode: [404],
 
 				// don't include this, it's just here to tell you that it's a reserved name
 				exp: undefined
-			}
+			},
+
+			// You can also define statusCodes to consider erroneous for all backed paths at once
+			onStatusCode: [500],
 		}
 
 		// this is not used at this time but reserved for future use.

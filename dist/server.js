@@ -103,6 +103,7 @@ if (!CLIOPTS.config) {
 var configPath = require.resolve(_path2['default'].normalize(CLIOPTS.config[0] === '/' ? CLIOPTS.config : process.cwd() + '/' + CLIOPTS.config));
 var config;
 function loadConfig() {
+	VERBOSE && console.log('loading config');
 	delete require.cache[configPath];
 	config = require(configPath);
 	// map config paths to regexps
@@ -174,9 +175,9 @@ function proxyMiddleware(req, res, next) {
 	proxyReq = _http2['default'].request(requestOptions, function (proxyRes) {
 		proxyRes.pause();
 		// check for backed status code
-		if (hostConfig.backed && hostConfig.backed[options.backedBy] && hostConfig.backed[options.backedBy].onStatusCode && ~hostConfig.backed[options.backedBy].onStatusCode.indexOf(proxyRes.statusCode)) {
+		if (options.backedBy && (hostConfig.backed.onStatusCode && ~hostConfig.backed.onStatusCode.indexOf(proxyRes.statusCode) || hostConfig.backed[options.backedBy].onStatusCode && ~hostConfig.backed[options.backedBy].onStatusCode.indexOf(proxyRes.statusCode))) {
 			proxyRes.resume();
-			return onError('backedStatusCode');
+			return onError('Status code rejection');
 		}
 
 		//- copy proxyResponse headers to clientResponse, replacing and removing unwanted ones as set in hostConfig
@@ -265,7 +266,7 @@ app.use('/proxy.pac', function (req, res, next) {
 	var localAddress = (address.address.match(/^(|::)$/) ? '127.0.0.1' : address.address) + ':' + address.port;
 	var pacConfig = Object.keys(config).map(function (hostKey) {
 		var direct = config[hostKey].passthrough ? '; DIRECT' : '';
-		return 'if (shExpMatch(host, \'' + hostKey + '\')) return \'PROXY ' + localAddress + '' + direct + '\';';
+		return 'if (shExpMatch(host, \'' + hostKey + '\')) return \'PROXY ' + localAddress + direct + '\';';
 	}).join('\n\t');
 	res.setHeader('Content-Type', 'application/x-ns-proxy-autoconfig');
 	res.end('function FindProxyForURL(url, host) {\n\t' + pacConfig + '\n\treturn "DIRECT";\n}');

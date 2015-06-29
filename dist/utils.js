@@ -14,7 +14,7 @@ var _crypto = require('crypto');
 
 var _crypto2 = _interopRequireDefault(_crypto);
 
-var IGNORED_PATH = ['responseHeaders'];
+var IGNORED_PATH = ['responseHeaders', 'onStatusCode'];
 
 /**
  * return a basic hash of the object passed in
@@ -59,9 +59,7 @@ function normalizeHostConfigSection(hostConfig, section) {
 }
 
 function applyResponseHeaders(res, headers) {
-	headers && Object.keys(headers).filter(function (path) {
-		return ! ~IGNORED_PATH.indexOf(path);
-	}).forEach(function (header) {
+	headers && Object.keys(headers).forEach(function (header) {
 		if (headers[header]) {
 			res.setHeader(header, headers[header]);
 		} else {
@@ -79,7 +77,9 @@ function applyIncomingMessageHeaders(incoming, headers) {
 
 function pathMatchingLookup(url, typeConfig) {
 	var path = undefined;
-	return typeConfig && Object.keys(typeConfig).some(function (_path) {
+	return typeConfig && Object.keys(typeConfig).filter(function (path) {
+		return ! ~IGNORED_PATH.indexOf(path);
+	}).some(function (_path) {
 		path = _path;
 		return typeConfig[path].use && url.match(typeConfig[path].exp);
 	}) ? path : false;
