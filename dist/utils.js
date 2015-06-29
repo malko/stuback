@@ -46,8 +46,7 @@ function normalizeHostConfig(hostConfig) {
 function normalizeHostConfigSection(hostConfig, section) {
 	section in hostConfig && Object.keys(hostConfig[section]).filter(function (path) {
 		return ! ~IGNORED_PATH.indexOf(path);
-	}) // jshint ignore:line
-	.forEach(function (path) {
+	}).forEach(function (path) {
 		if (typeof hostConfig[section][path] !== 'object') {
 			hostConfig[section][path] = { use: !!hostConfig[section][path] };
 		}
@@ -62,8 +61,7 @@ function normalizeHostConfigSection(hostConfig, section) {
 function applyResponseHeaders(res, headers) {
 	headers && Object.keys(headers).filter(function (path) {
 		return ! ~IGNORED_PATH.indexOf(path);
-	}) // jshint ignore:line
-	.forEach(function (header) {
+	}).forEach(function (header) {
 		if (headers[header]) {
 			res.setHeader(header, headers[header]);
 		} else {

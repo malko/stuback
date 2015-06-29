@@ -1,6 +1,7 @@
 {
+	"bitwise": false,
 	"esnext": true,
 	"expr": true,
-	"node": true,
-	"bitwise": true
+	"laxbreak" : true,
+	"node": true
 }
