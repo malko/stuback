@@ -10,6 +10,10 @@
   "bin": {
     "stuback": "dist/server.js"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/malko/stuback.git"
+  },
   "keywords": [
     "stub",
     "proxy",

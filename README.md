@@ -23,76 +23,87 @@ Stuback watch the configuration file for changes so it will be automatically rea
 Here's a commented sample configuration file:
 ```javascrip
 module.exports = {
-	/**************************************************************************************
-	* Each host has it's own "hostConfig" section.                                        *
-	* The key must match the received reqest hostname.                                    *
-	* **/!\** when requesting your local machine the request will have a _null_ hostname, *
-	*  		_stuback_ will then lookup for a _localhost_ config.                          *
-	**************************************************************************************/
+	/**********************************************************************************
+	* Each host has it's own "hostConfig" section.                                    *
+	* The key must match the received reqest hostname.                                *
+	* **/!\** when requesting your local machine the request will have a              *
+	*         _null_ hostname, _stuback_ will then lookup for a _localhost_ config.   *
+	**********************************************************************************/
 	localhost: {
 
-		// Optional server to redirect request to (useful when stuback is used as a system or browser proxy)
+		// Optional server to redirect request to
+		//(useful when stuback is used as a system or browser proxy)
 		targetHost: 'mydevelopmentserver.net',
 
 		// Optional port to redirect request to
 		targetPort: '8080',
 
-		// When true stuback will try to proxy any request which doesn't match defined paths in stubbed or backed,
-		// If false you will get an error on not stubbed or backed urls
-		// You probably want true for a system defined proxy and this is probably what you want in most cases
+		// When true stuback will try to proxy any request which doesn't match defined
+		// paths in stubbed or backed.
+		// If false you will get an error on not stubbed or backed urls.
+		// You probably want true for a system defined proxy and probably in most cases
 		passthrough: true,
 
-		/*********************************************************************************************
-		* *stubs* contains a list of path which will be looked up for a stub file on the system.     *
-		* Each paths has a corresponding config which can be as simple as _true_, or a config object *
-		*********************************************************************************************/
+		/***************************************************************************
+		* *stubs* contains a list of path which will be looked up for a stub file. *
+		***************************************************************************/
 		stubs: {
-			// Keys are path patterns (as in connect/express) of urls to stubs, they will be looked up in order
+			// Keys are path patterns (as in connect/express) of urls to stubs,
+			// they will be looked up in order they are defined.
 			'/api/doc.html': true, // boolean value can be used as a shortcut for {use: true}
 
 			'/api/*': {
-				// True if ommited, this tell stuback whether this path should be used for url matching or not
-				// This is a convenience to quickly disabled a path from the config file without removing from the file.
+				// True if ommited, tell stuback whether this path should be used
+				// for url matching or not. This is a convenience to quickly disable
+				// a path from the config without removing the it from the file.
 				use: true,
 
 				// You can defined specific response headers for a given path.
 				// They will be applied after hostConfig.responseHeaders and hostConfig.stubs.responseHeaders settings
 				// Any falsy value will result in header removal.
 				responseHeaders: {
-					'Content-Type': 'application/vnd.myapimediatype+json', // add a Content-Type header
-					'WWW-Authenticate': false // remove any WWW-Authenticate header
+					// add a Content-Type header
+					'Content-Type': 'application/vnd.myapimediatype+json',
+					// remove any WWW-Authenticate header
+					'WWW-Authenticate': false
 				}
 			},
 
 			// You can defined specific response headers for all stubbed paths at once.
-			// They will be applied after hostConfig.responseHeaders settings and before hostConfig.stubs.path.responseHeaders.
-			// falsy values will result in header removal.
+			// They will be applied after hostConfig.responseHeaders settings and
+			// before hostConfig.stubs.path.responseHeaders.
+			// Falsy values will result in header removal.
 			responseHeaders: { 'Content-Type': 'application/json' }
 
 			// don't include this, it's just here to tell you that it's a reserved name
 			exp: undefined
 		},
 
-		/*
-		* **backed** contains a list of path patterns which will be looked up _after_ the one in stubs.
-		* Each paths has it's own config as in stubs. If a url matched then it will try to reach the remote server
-		* and will backup the response in your stubs directory before returning it as a response.
-		* If the remote server request doesn't work then the backup will be returned instead.
-		* All configs from stubs section may apply here.
-		*/
+		/*************************************************************************************
+		* **backed** contains a list of path patterns which will be looked up _after_        *
+		* the one in stubs.                                                                  *
+		* Each paths has it's own config as in stubs.                                        *
+		* If a url matched then it will try to reach the remote server and will backup       *
+		* the response in your stubs directory before returning it as a response.            *
+		* If the remote server request doesn't work then the backup will be returned instead.*
+		* All configs from stubs section may apply here.                                     *
+		*************************************************************************************/
 		backed: {
-			// Keys are path patterns (as in connect/express) of urls to backup, they will be looked up in order
+			// Keys are path patterns (as in connect/express) of urls to backup.
+			// They will be looked up in order they are defined.
 			'/*': {
 				use: true,
 				responseHeaders: {
 					'Content-Type': 'Application/json'
 				},
 
-				// by default each request to the remote server are considered success whenever the server gave one,
-				// whatever their status code is. So stuback will probably save an empty stub on 404 or 500 server error.
-				// It can actually be the right thing to reply
-				// backedStatusCode is a list of remote server statusCode you want to consider erroneous and so the actual stub
-				// file will be returned instead if the server respond with one of this code
+				// by default each request to the remote server are considered success
+				// whenever the server gave one, whatever their status code is.
+				// So stuback will probably save an empty stub on 404 or 500 server error.
+				// It can actually be the right thing to reply but if not
+				// *backedStatusCode* is a list of remote server statusCode you want to
+				// consider erroneous. So the actual stub file will be returned instead
+				// if the server respond with one of the given codes
 				onStatusCode: [404, 500],
 
 				// don't include this, it's just here to tell you that it's a reserved name
@@ -103,8 +114,8 @@ module.exports = {
 		// this is not used at this time but reserved for future use.
 		tampered: {}
 
-		// You can set response headers to add to any response done via stuback for this specific host.
-		// They will be applied first in any cases and falsy values will result in header removal.
+		// You can set response headers to add to any stuback response for this specific host.
+		// They will be applied first in any cases, falsy values will result in header removal.
 		responseHeaders: { // list of headers to add to proxyed response, will be removed if falsy
 			'X-stuback-custom': 'stubacked'
 		}
