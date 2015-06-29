@@ -8,10 +8,6 @@ var _connect = require('connect');
 
 var _connect2 = _interopRequireDefault(_connect);
 
-var _crypto = require('crypto');
-
-var _crypto2 = _interopRequireDefault(_crypto);
-
 var _fs = require('fs');
 
 var _fs2 = _interopRequireDefault(_fs);
@@ -22,17 +18,17 @@ var _http2 = _interopRequireDefault(_http);
 
 // import https from 'https';
 
-var _mkdirp = require('mkdirp');
-
-var _mkdirp2 = _interopRequireDefault(_mkdirp);
-
 var _path = require('path');
 
 var _path2 = _interopRequireDefault(_path);
 
-var _pathToRegexp = require('path-to-regexp');
+var _mkdirp = require('mkdirp');
 
-var _pathToRegexp2 = _interopRequireDefault(_pathToRegexp);
+var _mkdirp2 = _interopRequireDefault(_mkdirp);
+
+var _utils = require('./utils');
+
+var _utils2 = _interopRequireDefault(_utils);
 
 var USERDIR = process.env[process.platform == 'win32' ? 'USERPROFILE' : 'HOME'];
 var PORTEXP = /:\d+$/;
@@ -48,7 +44,7 @@ var HELP_MESSAGE = function HELP_MESSAGE(exitCode) {
 	process.exit(exitCode);
 };
 
-var DEFAULT_CONFIG = 'module.exports = {\n\t\'localhost\': {\n\t\tpassthrough: true, // if yes will proxy request that are not stubed, backed or tampered\n\t\tstubs: [], // list of path to use stubs for\n\t\tbacked: [], // list of path to automaticly backup and send as stub if the remote server doesn\'t respond\n\t\ttampered: [], // not functionnal for now will handle path where you want to modify request and response on the fly\n\t\ttargetHost: false, // optional value to redirect request to another host than the one passed in\n\t\ttargetPort: false // optional value to redirect request to another port than the one requested\n\t}\n};';
+var DEFAULT_CONFIG = '{\n\t"localhost": {\n\t\t"passthrough": true,\n\t\t"stubs": {},\n\t\t"backed": {},\n\t\t"tampered": {},\n\t\t"targetHost": false,\n\t\t"targetPort": false\n\t}\n}';
 
 //----- CLI PARAMETERS PARSING -----//
 if (process.argv.length <= 2) {
@@ -96,7 +92,7 @@ if (!CLIOPTS.stubsPath) {
 //----- LOAD CONFIGURATION FILE AND WATCH IT FOR CHANGE -----//
 if (!CLIOPTS.config) {
 	// use default configuration path and init config file if needed
-	CLIOPTS.config = _path2['default'].normalize(USERDIR + '/.stuback.js');
+	CLIOPTS.config = _path2['default'].normalize(USERDIR + '/.stuback.json');
 	try {
 		_fs2['default'].readFileSync(CLIOPTS.config);
 	} catch (e) {
@@ -108,41 +104,14 @@ var configPath = require.resolve(_path2['default'].normalize(CLIOPTS.config[0] =
 var config;
 function loadConfig() {
 	delete require.cache[configPath];
-	console.log('loading config');
 	config = require(configPath);
 	// map config paths to regexps
-	var pathMapper = function pathMapper(path) {
-		return (0, _pathToRegexp2['default'])(path);
-	};
 	Object.keys(config).forEach(function (hostKey) {
-		config[hostKey].stubs && (config[hostKey].stubs = config[hostKey].stubs.map(pathMapper));
-		config[hostKey].backed && (config[hostKey].backed = config[hostKey].backed.map(pathMapper));
-		config[hostKey].tampered && (config[hostKey].tampered = config[hostKey].tampered.map(pathMapper));
+		return _utils2['default'].normalizeHostConfig(config[hostKey]);
 	});
 }
 loadConfig();
 _fs2['default'].watch(configPath, loadConfig);
-
-/**
- * return a basic hash of the object passed in
- * @param {Object} v object to get hash for
- * @return {string} a hash of the given object
- */
-function hashParams(v) {
-	if (!(v.length || Object.keys(v).length)) {
-		return '';
-	}
-	return '-' + _crypto2['default'].createHash('md5').update(JSON.stringify(v)).digest('hex');
-}
-
-/**
- * return the path of stub file based on a corresponding request object
- * @param {httpRequest} req the server incoming request to get stub filename for
- * @return {string} the stub path corresponding to this httpRequest
- */
-function getStubFileName(req) {
-	return CLIOPTS.stubsPath + (req._parsedUrl.hostname || req._parsedUrl.host || 'localhost') + '/' + req.method.toLowerCase() + '-' + (req._parsedUrl.path !== '/' ? encodeURIComponent(req._parsedUrl.path.replace(/^\//, '')) : '_') + (req.params ? hashParams(req.params) : '');
-}
 
 /**
  * This is the real proxy logic middleware
@@ -150,7 +119,7 @@ function getStubFileName(req) {
  * @param {httpRequest} req the request received by the main stuback middleware
  * @param {httpResponse} res the response used to by the main stuback middleware to reply to the connected client
  * @param {Function} next the next method to call next connect middleware in the main middleware
- * @param {*} options = {} contains the hostConfig options + some boolean values about the way the middleware should work (isBacked mainly)
+ * @param {*} options = {} contains the hostConfig options + some boolean values about the way the middleware should work (backedBy mainly)
  */
 function proxyMiddleware(req, res, next) {
 	var options = arguments[3] === undefined ? {} : arguments[3];
@@ -169,8 +138,19 @@ function proxyMiddleware(req, res, next) {
 	    proxyReq = undefined,
 	    cacheStream = undefined;
 
+	//- on proxy error we need to either try to return a stub or pass to the connect middleware
+	function onError(err) {
+		VERBOSE && console.error('ERROR', err);
+		if (options.backedBy) {
+			options.hostConfig.passthrough = false;
+			stubMiddleware(req, res, next, options);
+		} else {
+			next(err);
+		}
+	}
+
 	//- prepare request headers to proxyRequest and remove unwanted ones
-	options.isBacked && removedHeaders.push.apply(removedHeaders, PROXYBACKUPREMOVEDHEADERS);
+	options.backedBy && removedHeaders.push.apply(removedHeaders, PROXYBACKUPREMOVEDHEADERS);
 	removeHeadersExp = new RegExp('^(' + removedHeaders.join('|') + ')$');
 	Object.keys(req.headers).forEach(function (header) {
 		header.match(removeHeadersExp) || (requestOptions.headers[header] = req.headers[header]);
@@ -193,6 +173,11 @@ function proxyMiddleware(req, res, next) {
 	//- launch the proxyRequest
 	proxyReq = _http2['default'].request(requestOptions, function (proxyRes) {
 		proxyRes.pause();
+		// check for backed status code
+		if (hostConfig.backed && hostConfig.backed[options.backedBy] && hostConfig.backed[options.backedBy].onStatusCode && ~hostConfig.backed[options.backedBy].onStatusCode.indexOf(proxyRes.statusCode)) {
+			proxyRes.resume();
+			return onError('backedStatusCode');
+		}
 
 		//- copy proxyResponse headers to clientResponse, replacing and removing unwanted ones as set in hostConfig
 		Object.keys(proxyRes.headers).forEach(function (hname) {
@@ -200,20 +185,14 @@ function proxyMiddleware(req, res, next) {
 		});
 		res.setHeader('via', 'stuback');
 		if (hostConfig.responseHeaders) {
-			Object.keys(hostConfig.responseHeaders).forEach(function (header) {
-				if (hostConfig.responseHeaders[header]) {
-					proxyRes.headers[header.toLowerCase()] = hostConfig.responseHeaders[header];
-				} else {
-					delete proxyRes.headers[header.toLowerCase()];
-				}
-			});
+			_utils2['default'].applyIncomingMessageHeaders(proxyRes, hostConfig.responseHeaders);
 		}
 		res.writeHead(proxyRes.statusCode, proxyRes.headers);
 
 		//- manage backup copy if necessary
-		if (options.isBacked) {
+		if (options.backedBy) {
 			(function () {
-				var stubFileName = getStubFileName(req);
+				var stubFileName = _utils2['default'].getStubFileName(CLIOPTS.stubsPath, req);
 				var stubDirname = _path2['default'].dirname(stubFileName);
 				_fs2['default'].existsSync(stubDirname) || _mkdirp2['default'].sync(stubDirname);
 				cacheStream = _fs2['default'].createWriteStream(stubFileName);
@@ -229,21 +208,7 @@ function proxyMiddleware(req, res, next) {
 		proxyRes.resume();
 	});
 
-	//- on proxy error we need to either try to return a stub or pass to the connect middleware
-	proxyReq.on('error', function (err) {
-		if (options.isBacked) {
-			var _options = {
-				isStubbed: true,
-				isBacked: false,
-				isTampered: false,
-				hostConfig: { passthrough: false }
-			};
-			stubMiddleware(req, res, next, _options);
-		} else {
-			next(err);
-		}
-		VERBOSE && console.error('ERROR', err);
-	});
+	proxyReq.on('error', onError);
 
 	//- finaly piping clientReqest body to proxyRequest
 	req.pipe(proxyReq);
@@ -252,7 +217,7 @@ function proxyMiddleware(req, res, next) {
 
 /**
  * This middleware should return the stubbed content if any for the given request.
- * Regarding the hostConfig passthrough settings will wall the remote server if a stub file is not présent.
+ * Regarding the hostConfig passthrough settings will call the remote server if a stub file is not présent.
  * @param {httpRequest} req the request received by the main stuback middleware
  * @param {httpResponse} res the response used to by the main stuback middleware to reply to the connected client
  * @param {Function} next the next method to call next connect middleware in the main middleware
@@ -261,7 +226,7 @@ function proxyMiddleware(req, res, next) {
 function stubMiddleware(req, res, next) {
 	var options = arguments[3] === undefined ? {} : arguments[3];
 
-	var stubFileName = getStubFileName(req),
+	var stubFileName = _utils2['default'].getStubFileName(CLIOPTS.stubsPath, req),
 	    hostConfig = options.hostConfig;
 
 	VERBOSE && console.log('pattern searching for %s(%s)', req.method, req._parsedUrl.path);
@@ -270,20 +235,21 @@ function stubMiddleware(req, res, next) {
 		if (!exists) {
 			VERBOSE && console.log('patterns didn\'t found response for %s(%s) -> (%s)', req.method, req.url, _path2['default'].basename(stubFileName));
 			if (hostConfig.passthrough) {
+				hostConfig.backedBy = false; // ensure we won't loop
 				return proxyMiddleware(req, res, next, options);
 			}
 			return next();
 		}
 		VERBOSE && console.log('Reply with get/%s', _path2['default'].basename(stubFileName));
-		if (hostConfig.responseHeaders) {
-			Object.keys(hostConfig.responseHeaders).forEach(function (header) {
-				if (hostConfig.responseHeaders[header]) {
-					res.setHeader(header, hostConfig.responseHeaders[header]);
-				} else {
-					res.removeHeader(header);
-				}
-			});
+		_utils2['default'].applyResponseHeaders(res, hostConfig.responseHeaders);
+		if (options.stubbedBy) {
+			_utils2['default'].applyResponseHeaders(res, hostConfig.stubs.responseHeaders);
+			_utils2['default'].applyResponseHeaders(res, hostConfig.stubs[options.stubbedBy].responseHeaders);
+		} else if (options.backedBy) {
+			_utils2['default'].applyResponseHeaders(res, hostConfig.backed.responseHeaders);
+			_utils2['default'].applyResponseHeaders(res, hostConfig.backed[options.backedBy].responseHeaders);
 		}
+
 		var stub = _fs2['default'].createReadStream(stubFileName);
 		stub.pipe(res);
 	});
@@ -320,22 +286,16 @@ app.use(function (req, res, next) {
 	var hostConfig = config[hostKey],
 	    url = req._parsedUrl.path,
 	    middleWareOptions = {
-		isStubbed: hostConfig.stubs.some(function (exp) {
-			return !!url.match(exp);
-		}),
-		isBacked: hostConfig.backed.some(function (exp) {
-			return !!url.match(exp);
-		}),
-		isTampered: hostConfig.tampered.some(function (exp) {
-			return !!url.match(exp);
-		}),
+		stubbedBy: _utils2['default'].pathMatchingLookup(url, hostConfig.stubs),
+		backedBy: _utils2['default'].pathMatchingLookup(url, hostConfig.backed),
+		tamperedBy: _utils2['default'].pathMatchingLookup(url, hostConfig.tampered),
 		hostConfig: hostConfig
 	};
 
 	//- adopt the strategy corresponding to hostConfig
-	if (middleWareOptions.isStubbed) {
+	if (middleWareOptions.stubbedBy) {
 		stubMiddleware(req, res, next, middleWareOptions);
-	} else if (middleWareOptions.isBacked) {
+	} else if (middleWareOptions.backedBy) {
 		proxyMiddleware(req, res, next, middleWareOptions);
 	} else if (middleWareOptions.passthrough) {
 		proxyMiddleware(req, res, next);
