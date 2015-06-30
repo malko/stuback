@@ -40,6 +40,7 @@ var Config = (function () {
 		value: function load() {
 			var _this2 = this;
 
+			this.verbose && console.log('loading config at %s', this.configPath);
 			delete require.cache[this.configPath];
 			this._config = require(this.configPath);
 			this.getHosts().forEach(function (host) {

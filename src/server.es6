@@ -18,7 +18,9 @@ const PROXYREMOVEDHEADERS = [
 ]; //@FIXME the headers names in th connection header should be removed too.
 // some header we want to remove to control when we want to create a backup copy of the response
 const PROXYBACKUPREMOVEDHEADERS = [
-	'if-modified-since', // avoid getting 304 response on browser refresh
+	// avoid getting 304 response on browser refresh
+	'if-modified-since',
+	'if-none-match',
 	'accept-encoding' // we want human readable content
 ];
 
@@ -152,7 +154,7 @@ function proxyMiddleware(req, res, next, options = {}) {
 
 	//- prepare request headers to proxyRequest and remove unwanted ones
 	options.backedBy && removedHeaders.push(...PROXYBACKUPREMOVEDHEADERS);
-	removeHeadersExp = new RegExp(`^(${removedHeaders.join('|')})$`);
+	removeHeadersExp = new RegExp(`^(${removedHeaders.join('|')})$`, 'i');
 	Object.keys(req.headers).forEach((header) => {
 		header.match(removeHeadersExp) || (requestOptions.headers[header] = req.headers[header]);
 	});

@@ -27,6 +27,21 @@ _fs2['default'].readdirSync(templateDir).forEach(function (tplFile) {
 	matches && stpl.registerString(matches[1], _fs2['default'].readFileSync(_path2['default'].normalize(templateDir + '/' + tplFile)).toString());
 });
 
+function redirect(res, url) {
+	res.writeHead(302, { Location: url });
+	res.end('');
+}
+
+function replyTemplate(res, tplName, tplData) {
+	res.setHeader('Content-Type', 'text/html');
+	res.setHeader('Pragma', 'no-cache');
+	try {
+		res.end(stpl(tplName, tplData));
+	} catch (e) {
+		res.end('Template generation error\n' + e.toString());
+	}
+}
+
 function use(app, CLIOPTS, config) {
 
 	function decodeStubParam(req) {
@@ -34,25 +49,32 @@ function use(app, CLIOPTS, config) {
 	}
 
 	function parseStubPath(stubPath) {
-		var dirname = _path2['default'].dirname(stubPath.substring(CLIOPTS.stubsPath.length));
-		var file = _path2['default'].basename(stubPath);
+		var file = stubPath.slice(CLIOPTS.stubsPath.length);
 		var host = undefined,
+		    port = undefined,
 		    basename = undefined,
 		    method = undefined;
-		dirname.replace(/^([^:%]+(:\d+))?/, function (m, _host) {
-			return host = _host;
+		var fullPath = file.replace(/^([^:]+):(\d+)\//, function (m, h, p) {
+			host = h, method;
+			port = p;
+			return '';
 		});
-		file.replace(/^([^-]+)-(.*?)/, function (m, _method, _basename) {
+		var dirname = _path2['default'].dirname(fullPath);
+		var fileName = _path2['default'].basename(stubPath);
+		fileName.replace(/^([^-]+)-(.*)/, function (m, _method, _basename) {
 			method = _method;
 			basename = _basename;
 		});
 		return {
-			fullpath: stubPath,
-			dirname: dirname,
-			basename: file.replace(/^[^-]+-/, ''),
+			fileFullPath: file,
+			file: fullPath,
+			fileName: fileName,
 			host: host,
-			urlpath: dirname.substr(host.length + 1),
-			file: file,
+			port: port,
+			dirname: dirname,
+			urlBasename: decodeURIComponent(basename),
+			urlpath: decodeURIComponent(dirname),
+			url: _path2['default'].normalize(decodeURIComponent(dirname) + '/' + decodeURIComponent(basename)),
 			method: method
 		};
 	}
@@ -63,7 +85,7 @@ function use(app, CLIOPTS, config) {
 		var localAddress = config.getLocalAddress();
 		var pacConfig = config.getHosts().map(function (hostKey) {
 			var direct = config.getHostConfig(hostKey).passthrough ? '; DIRECT' : '';
-			return 'if (shExpMatch(host, \'' + hostKey + '\')) return \'PROXY ' + localAddress + direct + '\';';
+			return 'if (shExpMatch(host, \'' + hostKey + '\')) return \'PROXY ' + localAddress + '' + direct + '\';';
 		}).join('\n\t');
 		res.setHeader('Content-Type', 'application/x-ns-proxy-autoconfig');
 		res.end('function FindProxyForURL(url, host) {\n\t' + pacConfig + '\n\treturn "DIRECT";\n}');
@@ -76,11 +98,10 @@ function use(app, CLIOPTS, config) {
 		_fs2['default'].readFile(stubPath, function (err, raw) {
 			if (err) {
 				res.statusCode = 404;
-				res.end(err);
+				return res.end(err.toString());
 			}
 			tplData.content = raw;
-			res.setHeader('Content-Type', 'text/html');
-			res.end(stpl('admin-stubs-form', tplData));
+			replyTemplate(res, 'admin-stubs-form', tplData);
 		});
 	});
 
@@ -89,10 +110,9 @@ function use(app, CLIOPTS, config) {
 		_fs2['default'].unlink(stub, function (err) {
 			if (err) {
 				res.statusCode = 500;
-				res.end(err);
+				return res.end(err.toString());
 			}
-			res.writeHead(302, { Location: req.headers.referer });
-			res.end('');
+			redirect(res, '/stuback/admin-stubs');
 		});
 	});
 
@@ -103,7 +123,7 @@ function use(app, CLIOPTS, config) {
 		_fs2['default'].readdir(CLIOPTS.stubsPath, function (err, hosts) {
 			if (err) {
 				res.statusCode = 404;
-				res.end('404 - NOT FOUND');
+				return res.end('404 - NOT FOUND');
 			}
 			hosts.forEach(function (hostname) {
 				var host = { name: hostname, stubPaths: [] };
@@ -118,26 +138,33 @@ function use(app, CLIOPTS, config) {
 					_fs2['default'].readdirSync(hostPath + '/' + stubPath.path).forEach(function (stub) {
 						var m = stub.match(/^([^-]+)-(.*)$/);
 						stubPath.stubs.push({
-							file: hostname + '/' + stubPath.path + '/' + stub,
+							file: _path2['default'].normalize(hostname + '/' + stubPath.path + '/' + stub),
 							method: m[1],
 							name: m[2]
 						});
 					});
 				});
 			});
-			res.setHeader('Content-Type', 'text/html');
-			res.setHeader('Pragma', 'no-cache');
-			res.end(stpl('admin-stubs', tplData));
+			replyTemplate(res, 'admin-stubs', tplData);
 		});
 	});
 
 	app.use('/stuback/admin', function (req, res) {
-		res.setHeader('Content-Type', 'text/html');
-		res.end(stpl('index', { localAddress: config.getLocalAddress() }));
+		replyTemplate(res, 'index', { localAddress: config.getLocalAddress() });
 	});
+
+	app.use('/stuback/assets', function (req, res) {
+		var file = req._parsedUrl.path.replace(/^\/stuback\/assets/, '').replace(/[\0\.]+/g, '.');
+		try {
+			var stream = _fs2['default'].createReadStream(_path2['default'].normalize(__dirname + '/../public/assets' + file));
+			stream.pipe(res);
+		} catch (e) {
+			res.end(e.toString());
+		}
+	});
+
 	app.use('/stuback', function (req, res) {
-		res.writeHead(302, { Location: '/stuback/admin' });
-		res.end('');
+		redirect(res, '/stuback/admin');
 	});
 }
 

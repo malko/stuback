@@ -11,6 +11,21 @@ fs.readdirSync(templateDir).forEach((tplFile) => {
 	matches && stpl.registerString(matches[1], fs.readFileSync(path.normalize(templateDir + '/' + tplFile)).toString());
 });
 
+function redirect(res, url) {
+	res.writeHead(302, {Location: url});
+	res.end('');
+}
+
+function replyTemplate(res, tplName, tplData) {
+	res.setHeader('Content-Type', 'text/html');
+	res.setHeader('Pragma', 'no-cache');
+	try {
+		res.end(stpl(tplName, tplData));
+	} catch (e) {
+		res.end('Template generation error\n' + e.toString());
+	}
+}
+
 function use(app, CLIOPTS, config) {
 
 	function decodeStubParam(req) {
@@ -22,21 +37,29 @@ function use(app, CLIOPTS, config) {
 	}
 
 	function parseStubPath(stubPath) {
-		let dirname = path.dirname(stubPath.substring(CLIOPTS.stubsPath.length));
-		let file = path.basename(stubPath);
-		let host, basename, method;
-		dirname.replace(/^([^:%]+(:\d+))?/, (m, _host) => host = _host);
-		file.replace(/^([^-]+)-(.*?)/, (m, _method, _basename) => {
+		let file = stubPath.slice(CLIOPTS.stubsPath.length);
+		let host, port, basename, method;
+		let fullPath = file.replace(/^([^:]+):(\d+)\//, (m, h, p) => {
+			host = h, method;
+			port = p;
+			return '';
+		});
+		let dirname = path.dirname(fullPath);
+		let fileName = path.basename(stubPath);
+		fileName.replace(/^([^-]+)-(.*)/, (m, _method, _basename) => {
 			method = _method;
 			basename = _basename;
 		});
 		return {
-			fullpath: stubPath,
-			dirname: dirname,
-			basename: file.replace(/^[^-]+-/, ''),
+			fileFullPath: file,
+			file: fullPath,
+			fileName: fileName,
 			host: host,
-			urlpath: dirname.substr(host.length + 1),
-			file: file,
+			port: port,
+			dirname: dirname,
+			urlBasename: decodeURIComponent(basename),
+			urlpath: decodeURIComponent(dirname),
+			url: path.normalize(decodeURIComponent(dirname) + '/' + decodeURIComponent(basename)),
 			method: method
 		};
 	}
@@ -60,11 +83,10 @@ function use(app, CLIOPTS, config) {
 		fs.readFile(stubPath, function (err, raw) {
 			if (err) {
 				res.statusCode = 404;
-				res.end(err);
+				return res.end(err.toString());
 			}
 			tplData.content = raw;
-			res.setHeader('Content-Type', 'text/html');
-			res.end(stpl('admin-stubs-form', tplData));
+			replyTemplate(res, 'admin-stubs-form', tplData);
 		});
 	});
 
@@ -73,10 +95,9 @@ function use(app, CLIOPTS, config) {
 		fs.unlink(stub, (err) => {
 			if (err) {
 				res.statusCode = 500;
-				res.end(err);
+				return res.end(err.toString());
 			}
-			res.writeHead(302, {Location: req.headers.referer});
-			res.end('');
+			redirect(res, '/stuback/admin-stubs');
 		});
 	});
 
@@ -87,7 +108,7 @@ function use(app, CLIOPTS, config) {
 		fs.readdir(CLIOPTS.stubsPath, (err, hosts) => {
 			if (err) {
 				res.statusCode = 404;
-				res.end('404 - NOT FOUND');
+				return res.end('404 - NOT FOUND');
 			}
 			hosts.forEach((hostname) => {
 				let host = {name: hostname, stubPaths: []};
@@ -102,26 +123,33 @@ function use(app, CLIOPTS, config) {
 					fs.readdirSync(hostPath + '/' + stubPath.path).forEach((stub) => {
 						let m = stub.match(/^([^-]+)-(.*)$/);
 						stubPath.stubs.push({
-							file: hostname + '/' + stubPath.path + '/' + stub,
+							file: path.normalize(hostname + '/' + stubPath.path + '/' + stub),
 							method: m[1],
 							name: m[2]
 						});
 					});
 				});
 			});
-			res.setHeader('Content-Type', 'text/html');
-			res.setHeader('Pragma', 'no-cache');
-			res.end(stpl('admin-stubs', tplData));
+			replyTemplate(res, 'admin-stubs', tplData);
 		});
 	});
 
 	app.use('/stuback/admin', function (req, res) {
-		res.setHeader('Content-Type', 'text/html');
-		res.end(stpl('index', {localAddress: config.getLocalAddress()}));
+		replyTemplate(res, 'index', {localAddress: config.getLocalAddress()});
 	});
+
+	app.use('/stuback/assets', (req, res) => {
+		let file = req._parsedUrl.path.replace(/^\/stuback\/assets/, '').replace(/[\0\.]+/g, '.');
+		try {
+			let stream = fs.createReadStream(path.normalize(__dirname + '/../public/assets' + file));
+			stream.pipe(res);
+		} catch (e) {
+			res.end(e.toString());
+		}
+	});
+
 	app.use('/stuback', function (req, res) {
-		res.writeHead(302, {Location: '/stuback/admin'});
-		res.end('');
+		redirect(res, '/stuback/admin');
 	});
 }
 

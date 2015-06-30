@@ -45,8 +45,9 @@ var PORTEXP = /:\d+$/;
 // a proxy should always remove thoose headers
 var PROXYREMOVEDHEADERS = ['host', 'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailer', 'transfer-encoding', 'upgrade']; //@FIXME the headers names in th connection header should be removed too.
 // some header we want to remove to control when we want to create a backup copy of the response
-var PROXYBACKUPREMOVEDHEADERS = ['if-modified-since', // avoid getting 304 response on browser refresh
-'accept-encoding' // we want human readable content
+var PROXYBACKUPREMOVEDHEADERS = [
+// avoid getting 304 response on browser refresh
+'if-modified-since', 'if-none-match', 'accept-encoding' // we want human readable content
 ];
 
 var HELP_MESSAGE = function HELP_MESSAGE(exitCode) {
@@ -153,7 +154,7 @@ function proxyMiddleware(req, res, next) {
 
 	//- prepare request headers to proxyRequest and remove unwanted ones
 	options.backedBy && removedHeaders.push.apply(removedHeaders, PROXYBACKUPREMOVEDHEADERS);
-	removeHeadersExp = new RegExp('^(' + removedHeaders.join('|') + ')$');
+	removeHeadersExp = new RegExp('^(' + removedHeaders.join('|') + ')$', 'i');
 	Object.keys(req.headers).forEach(function (header) {
 		header.match(removeHeadersExp) || (requestOptions.headers[header] = req.headers[header]);
 	});

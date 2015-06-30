@@ -7,8 +7,6 @@ const IGNORED_PATH = ['responseHeaders', 'onStatusCode'];
 function cleanPath(path, encode) {
 	if (!path) {
 		return '';
-	} else if (path === '/') {
-		return '_';
 	}
 	path = path.replace(/\.\.+/g, '.').replace(/[\0;&<>\|\\]/g, '_');
 	return encode ? encodeURIComponent(path) : path;
@@ -36,7 +34,7 @@ function getStubFileName(stubsPath, req) {
 	let hostname = parsedUrl.hostname || parsedUrl.host || 'localhost';
 	let port = parsedUrl.port || 80;
 	let pathname = path.dirname(parsedUrl.pathname);
-	let filename = parsedUrl.path.substring(pathname.length + 1);
+	let filename = parsedUrl.path.substring(pathname.length).replace(/^\//, '');
 	return path.normalize(stubsPath + '/' + hostname + ':' + port + '/' + cleanPath(pathname, true) + '/') +
 		req.method.toLowerCase() + '-' + cleanPath(filename, true) +
 		(req.params ? hashParams(req.params) : '')
