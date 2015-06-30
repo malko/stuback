@@ -3,8 +3,6 @@ import path from 'path';
 import fs from 'fs';
 
 var stpl = _stpl.stpl;
-// register stpl filters
-stpl.registerFilter('decode', decodeURIComponent);
 
 //preload all stpl templates
 var templateDir = path.normalize(__dirname + '/../public');
@@ -13,15 +11,35 @@ fs.readdirSync(templateDir).forEach((tplFile) => {
 	matches && stpl.registerString(matches[1], fs.readFileSync(path.normalize(templateDir + '/' + tplFile)).toString());
 });
 
-function decodeStubParam(req, CLIOPTS) {
-	return path.normalize(CLIOPTS.stubsPath + '/' + decodeURIComponent(req._parsedUrl.query
-		.replace(/^(.+&)?path=([^&#]+)(&.*)?$/, '$2')
-		.replace(/\.+/, '.')
-		.replace(/\0/, '')))
-	;
-}
-
 function use(app, CLIOPTS, config) {
+
+	function decodeStubParam(req) {
+		return path.normalize(CLIOPTS.stubsPath + '/' + decodeURIComponent(req._parsedUrl.query
+			.replace(/^(.+&)?path=([^&#]+)(&.*)?$/, '$2')
+			.replace(/\.+/, '.')
+			.replace(/\0/, '')
+		));
+	}
+
+	function parseStubPath(stubPath) {
+		let dirname = path.dirname(stubPath.substring(CLIOPTS.stubsPath.length));
+		let file = path.basename(stubPath);
+		let host, basename, method;
+		dirname.replace(/^([^:%]+(:\d+))?/, (m, _host) => host = _host);
+		file.replace(/^([^-]+)-(.*?)/, (m, _method, _basename) => {
+			method = _method;
+			basename = _basename;
+		});
+		return {
+			fullpath: stubPath,
+			dirname: dirname,
+			basename: file.replace(/^[^-]+-/, ''),
+			host: host,
+			urlpath: dirname.substr(host.length + 1),
+			file: file,
+			method: method
+		};
+	}
 
 	//-- proxy auto config generation
 	app.use('/stuback/proxy.pac', function (req, res /*, next*/) {
@@ -36,17 +54,22 @@ function use(app, CLIOPTS, config) {
 	});
 
 	app.use('/stuback/admin-stubs/view', (req, res) => {
-		var stub = decodeStubParam(req, CLIOPTS);
+		var stubPath = decodeStubParam(req);
 		res.setHeader('Content-Type', 'text/plain');
-		var readStream = fs.createReadStream(stub);
-		readStream.pipe(res);
-		readStream.on('error', (err) => {
-			res.end(err);
+		let tplData = parseStubPath(stubPath);
+		fs.readFile(stubPath, function (err, raw) {
+			if (err) {
+				res.statusCode = 404;
+				res.end(err);
+			}
+			tplData.content = raw;
+			res.setHeader('Content-Type', 'text/html');
+			res.end(stpl('admin-stubs-form', tplData));
 		});
 	});
 
 	app.use('/stuback/admin-stubs/delete', (req, res) => {
-		var stub = decodeStubParam(req, CLIOPTS);
+		var stub = decodeStubParam(req);
 		fs.unlink(stub, (err) => {
 			if (err) {
 				res.statusCode = 500;
@@ -67,15 +90,22 @@ function use(app, CLIOPTS, config) {
 				res.end('404 - NOT FOUND');
 			}
 			hosts.forEach((hostname) => {
-				let host = {name: hostname, stubs: []};
+				let host = {name: hostname, stubPaths: []};
 				tplData.hosts.push(host);
 				let hostPath = path.normalize(CLIOPTS.stubsPath + '/' + hostname);
-				fs.readdirSync(hostPath).forEach((stub) => {
-					let m = stub.match(/^([^-]+)-(.*)$/);
-					host.stubs.push({
-						file: hostname + '/' + stub,
-						method: m[1],
-						name: m[2]
+				fs.readdirSync(hostPath).forEach((stubPath) => {
+					stubPath = {
+						path: stubPath,
+						stubs: []
+					};
+					host.stubPaths.push(stubPath);
+					fs.readdirSync(hostPath + '/' + stubPath.path).forEach((stub) => {
+						let m = stub.match(/^([^-]+)-(.*)$/);
+						stubPath.stubs.push({
+							file: hostname + '/' + stubPath.path + '/' + stub,
+							method: m[1],
+							name: m[2]
+						});
 					});
 				});
 			});
@@ -85,9 +115,13 @@ function use(app, CLIOPTS, config) {
 		});
 	});
 
-	app.use('/stuback', function (req, res) {
+	app.use('/stuback/admin', function (req, res) {
 		res.setHeader('Content-Type', 'text/html');
 		res.end(stpl('index', {localAddress: config.getLocalAddress()}));
+	});
+	app.use('/stuback', function (req, res) {
+		res.writeHead(302, {Location: '/stuback/admin'});
+		res.end('');
 	});
 }
 

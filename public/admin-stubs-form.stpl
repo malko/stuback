@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Stuback - admin-stubs</title>
+	<style>
+		label {
+			display: block;
+			with: 80%;
+			min-width: 500px;
+			margin: 1em;
+		}
+		input, textarea{
+			padding: .4em;
+			border: solid silver 1px;
+			border-radius: .1em;
+		}
+	</style>
+</head>
+<body>
+	<h1>Stuback Admin - Stub</h1>
+	<label>Http Method: <input type="text" placeholder="method" value="{{method}}"/></label>
+	<label>Host: <input type="text" placeholder="host" value="{{host}}"/></label>
+	<label>Stub Path: <input type="text" placeholder="path uri" value="{{{urlpath|decodeURIComponent}}}"/></label>
+	<label>Stub basename: <input type="text" placeholder="host" value="{{basename|decodeURIComponent}}"/></label>
+	<label>
+		Content: <br />
+		<textarea style="width: 80%; min-height: 350px;">{{content}}</textarea>
+	</label>
+</body>
+</html>
