@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Stuback - admin-stubs</title>
+</head>
+<body>
+	<h1>Stuback Admin - Stubs</h1>
+	<ul>
+	{{#hosts}}<li>
+	{{name}}
+	<ul>
+		{{#stubs}}
+		<li>
+			<b>{{method}}</b> - {{name|decodeURIComponent}}
+			<a href="/stuback/admin-stubs/view?path={{file|encodeURIComponent}}">view</a>
+			<a href="/stuback/admin-stubs/delete?path={{file|encodeURIComponent}}">delete</a>
+		</li>
+		{{/stubs}}
+	</ul>
+	</li>{{/hosts}}
+	</ul>
+</body>
+</html>

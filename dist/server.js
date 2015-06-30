@@ -30,6 +30,16 @@ var _utils = require('./utils');
 
 var _utils2 = _interopRequireDefault(_utils);
 
+var _config = require('./config');
+
+var _config2 = _interopRequireDefault(_config);
+
+// add stuback admin middlewares to the party
+
+var _admin = require('./admin');
+
+var _admin2 = _interopRequireDefault(_admin);
+
 var USERDIR = process.env[process.platform == 'win32' ? 'USERPROFILE' : 'HOME'];
 var PORTEXP = /:\d+$/;
 // a proxy should always remove thoose headers
@@ -101,18 +111,9 @@ if (!CLIOPTS.config) {
 	}
 }
 var configPath = require.resolve(_path2['default'].normalize(CLIOPTS.config[0] === '/' ? CLIOPTS.config : process.cwd() + '/' + CLIOPTS.config));
-var config;
-function loadConfig() {
-	VERBOSE && console.log('loading config');
-	delete require.cache[configPath];
-	config = require(configPath);
-	// map config paths to regexps
-	Object.keys(config).forEach(function (hostKey) {
-		return _utils2['default'].normalizeHostConfig(config[hostKey]);
-	});
-}
-loadConfig();
-_fs2['default'].watch(configPath, loadConfig);
+var config = new _config2['default'](configPath, CLIOPTS, function () {
+	return httpServer;
+});
 
 /**
  * This is the real proxy logic middleware
@@ -175,9 +176,13 @@ function proxyMiddleware(req, res, next) {
 	proxyReq = _http2['default'].request(requestOptions, function (proxyRes) {
 		proxyRes.pause();
 		// check for backed status code
-		if (options.backedBy && (hostConfig.backed.onStatusCode && ~hostConfig.backed.onStatusCode.indexOf(proxyRes.statusCode) || hostConfig.backed[options.backedBy].onStatusCode && ~hostConfig.backed[options.backedBy].onStatusCode.indexOf(proxyRes.statusCode))) {
-			proxyRes.resume();
-			return onError('Status code rejection');
+		if (options.backedBy) {
+			var backedCodes = hostConfig.backed.onStatusCode;
+			var pathCodes = hostConfig.backed[options.backedBy].onStatusCode;
+			var statusCode = proxyRes.statusCode;
+			if (backedCodes && ~backedCodes.indexOf(statusCode) || pathCodes && ~pathCodes.indexOf(statusCode)) {
+				return onError('Status code rejection(' + statusCode + ')');
+			}
 		}
 
 		//- copy proxyResponse headers to clientResponse, replacing and removing unwanted ones as set in hostConfig
@@ -258,34 +263,22 @@ function stubMiddleware(req, res, next) {
 
 //----- STUBACK CONNECT APPLICATION -----//
 var app = (0, _connect2['default'])();
-
-//-- proxy auto config generation
-app.use('/proxy.pac', function (req, res, next) {
-	console.log('serving PAC for %s', req.connection.remoteAddress);
-	var address = httpServer.address();
-	var localAddress = (address.address.match(/^(|::)$/) ? '127.0.0.1' : address.address) + ':' + address.port;
-	var pacConfig = Object.keys(config).map(function (hostKey) {
-		var direct = config[hostKey].passthrough ? '; DIRECT' : '';
-		return 'if (shExpMatch(host, \'' + hostKey + '\')) return \'PROXY ' + localAddress + direct + '\';';
-	}).join('\n\t');
-	res.setHeader('Content-Type', 'application/x-ns-proxy-autoconfig');
-	res.end('function FindProxyForURL(url, host) {\n\t' + pacConfig + '\n\treturn "DIRECT";\n}');
-});
+_admin2['default'].use(app, CLIOPTS, config);
 
 //-- do the real job
 app.use(function (req, res, next) {
 	var hostKey = req._parsedUrl.hostname || 'localhost';
+	var hostConfig = config.getHostConfig(hostKey);
 	VERBOSE && console.log('request received', hostKey, req.originalUrl);
 
 	//- if no hostConfig be a basic proxy
-	if (!config[hostKey]) {
+	if (!hostConfig) {
 		VERBOSE && console.log('proxying call to %s', hostKey);
 		return proxyMiddleware(req, res, next);
 	}
 
 	//- augment hostConfig with some values
-	var hostConfig = config[hostKey],
-	    url = req._parsedUrl.path,
+	var url = req._parsedUrl.path,
 	    middleWareOptions = {
 		stubbedBy: _utils2['default'].pathMatchingLookup(url, hostConfig.stubs),
 		backedBy: _utils2['default'].pathMatchingLookup(url, hostConfig.backed),
@@ -307,4 +300,4 @@ app.use(function (req, res, next) {
 
 //----- FINALLY START THE STUBACK SERVER -----//
 var httpServer = _http2['default'].createServer(app).listen(CLIOPTS.port);
-console.log('Stuback listening on port ' + CLIOPTS.port + '\nYou can use Automatic proxy configuration at http://localhost:' + CLIOPTS.port + '/proxy.pac\n');
+console.log('Stuback listening on port ' + CLIOPTS.port + '\nYou can use Automatic proxy configuration at http://localhost:' + CLIOPTS.port + '/stuback/proxy.pac\n');
