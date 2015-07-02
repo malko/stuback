@@ -249,11 +249,14 @@ function stubMiddleware(req, res, next, options = {}) {
 		if (options.stubbedBy) {
 			utils.applyResponseHeaders(res, hostConfig.stubs.responseHeaders);
 			utils.applyResponseHeaders(res, hostConfig.stubs[options.stubbedBy].responseHeaders);
+			let statusCode = hostConfig.stubs[options.stubbedBy].statusCode;
+			statusCode && (res.statusCode = statusCode);
 		} else if (options.backedBy) {
 			utils.applyResponseHeaders(res, hostConfig.backed.responseHeaders);
 			utils.applyResponseHeaders(res, hostConfig.backed[options.backedBy].responseHeaders);
+			let statusCode = hostConfig.backed[options.backedBy].statusCode;
+			statusCode && (res.statusCode = statusCode);
 		}
-
 		let stub = fs.createReadStream(stubFileName);
 		stub.pipe(res);
 	});

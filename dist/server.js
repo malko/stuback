@@ -258,11 +258,14 @@ function stubMiddleware(req, res, next) {
 		if (options.stubbedBy) {
 			_utils2['default'].applyResponseHeaders(res, hostConfig.stubs.responseHeaders);
 			_utils2['default'].applyResponseHeaders(res, hostConfig.stubs[options.stubbedBy].responseHeaders);
+			var statusCode = hostConfig.stubs[options.stubbedBy].statusCode;
+			statusCode && (res.statusCode = statusCode);
 		} else if (options.backedBy) {
 			_utils2['default'].applyResponseHeaders(res, hostConfig.backed.responseHeaders);
 			_utils2['default'].applyResponseHeaders(res, hostConfig.backed[options.backedBy].responseHeaders);
+			var statusCode = hostConfig.backed[options.backedBy].statusCode;
+			statusCode && (res.statusCode = statusCode);
 		}
-
 		var stub = _fs2['default'].createReadStream(stubFileName);
 		stub.pipe(res);
 	});

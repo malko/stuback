@@ -66,7 +66,13 @@ module.exports = {
 					'Content-Type': 'application/vnd.myapimediatype+json',
 					// remove any WWW-Authenticate header
 					'WWW-Authenticate': false
-				}
+				},
+
+				// Optionally you can force a particular response statusCode for a given path
+				statusCode: 500
+
+				// don't include this, it's just here to tell you that it's a reserved name
+				exp: undefined
 			},
 
 			// You can defined specific response headers for all stubbed paths at once.
@@ -74,9 +80,6 @@ module.exports = {
 			// before hostConfig.stubs.path.responseHeaders.
 			// Falsy values will result in header removal.
 			responseHeaders: { 'Content-Type': 'application/json' }
-
-			// don't include this, it's just here to tell you that it's a reserved name
-			exp: undefined
 		},
 
 		/*************************************************************************************
@@ -96,6 +99,7 @@ module.exports = {
 				responseHeaders: {
 					'Content-Type': 'Application/json'
 				},
+				statusCode: 200,
 
 				// by default each request to the remote server are considered success
 				// whenever the server gave one, whatever their status code is.
