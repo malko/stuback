@@ -27,7 +27,7 @@
 	</div>
 	<footer>
 		<button class="red" onclick="if(confirm('are you sure you want to delete this stub?')) window.location='/stuback/admin-stubs/delete?path={{fileFullPath|encodeURIComponent}}'">delete</button>
-		<button onclick="window.location='admin-stubs'">back</button>
+		<button onclick="window.location='/stuback/admin-stubs'">back</button>
 	</footer>
 </body>
 </html>

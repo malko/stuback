@@ -1,6 +1,9 @@
 html {
 	font-family: Sans Serif,  Helvetica, Arial;
 }
+body {
+	padding-bottom: 3.5em;
+}
 ul {
 	margin: 0;
 	padding:0;
@@ -25,13 +28,30 @@ div:last-of-type{
 }
 a {
 	color: #888;
-	text-transform: uppercase;
 	text-decoration: none;
-	margin-left:1em;
 }
 a:hover{
 	color: #333;
 	text-decoration: underline;
+}
+.action a {
+	text-transform: uppercase;
+	text-decoration: none;
+	margin-left: .2em;
+	border: solid #333 1px;
+	border-radius: .25em;
+	padding: .2em .4em;
+	font-size: .6em;
+}
+.action a:first-child {
+	margin-left: .5em;
+}
+.action a:hover {
+	background-color: #888;
+	color: #fff;
+}
+.action a.red:hover {
+	background-color: #A33;
 }
 label {
 	display: inline-block;

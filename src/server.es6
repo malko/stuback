@@ -114,7 +114,13 @@ if (!CLIOPTS.config) { // use default configuration path and init config file if
 		fs.writeFileSync(CLIOPTS.config, DEFAULT_CONFIG);
 	}
 }
-var configPath = require.resolve(path.normalize(CLIOPTS.config[0] === '/' ? CLIOPTS.config : (process.cwd() + '/' + CLIOPTS.config)));
+var configPath;
+try {
+	configPath = require.resolve(path.normalize(CLIOPTS.config[0] === '/' ? CLIOPTS.config : (process.cwd() + '/' + CLIOPTS.config)));
+} catch (e) {
+	console.error('Error loading configuration file %s', CLIOPTS.config);
+	process.exit(1);
+}
 var config = new Config(configPath, CLIOPTS, () => httpServer);
 
 /**

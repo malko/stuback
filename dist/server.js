@@ -111,7 +111,13 @@ if (!CLIOPTS.config) {
 		_fs2['default'].writeFileSync(CLIOPTS.config, DEFAULT_CONFIG);
 	}
 }
-var configPath = require.resolve(_path2['default'].normalize(CLIOPTS.config[0] === '/' ? CLIOPTS.config : process.cwd() + '/' + CLIOPTS.config));
+var configPath;
+try {
+	configPath = require.resolve(_path2['default'].normalize(CLIOPTS.config[0] === '/' ? CLIOPTS.config : process.cwd() + '/' + CLIOPTS.config));
+} catch (e) {
+	console.error('Error loading configuration file %s', CLIOPTS.config);
+	process.exit(1);
+}
 var config = new _config2['default'](configPath, CLIOPTS, function () {
 	return httpServer;
 });

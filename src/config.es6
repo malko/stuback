@@ -1,6 +1,7 @@
 import utils from './utils';
 import fs from 'fs';
 
+var _lastWatched = 0;
 class Config{
 	constructor(configPath, CLIOPTS, getHttpServerMethod) {
 		this._config = {};
@@ -13,10 +14,22 @@ class Config{
 	}
 
 	load() {
+		// dedupe fs.watch events within 100ms
+		let now = Date.now();
+		if (_lastWatched + 100 >= now) {
+			return;
+		}
+		_lastWatched = Date.now();
+
 		this.verbose && console.log('loading config at %s', this.configPath);
 		delete require.cache[this.configPath];
-		this._config = require(this.configPath);
-		this.getHosts().forEach((host) => utils.normalizeHostConfig(this.getHostConfig(host)));
+		try {
+			let config = require(this.configPath);
+			this._config = config;
+			this.getHosts().forEach((host) => utils.normalizeHostConfig(this.getHostConfig(host)));
+		} catch (e) {
+			console.error('Error loading configuration file, waiting for file change\n', e);
+		}
 	}
 
 	getHosts() {

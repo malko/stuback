@@ -18,6 +18,8 @@ var _fs = require('fs');
 
 var _fs2 = _interopRequireDefault(_fs);
 
+var _lastWatched = 0;
+
 var Config = (function () {
 	function Config(configPath, CLIOPTS, getHttpServerMethod) {
 		var _this = this;
@@ -40,12 +42,24 @@ var Config = (function () {
 		value: function load() {
 			var _this2 = this;
 
+			// dedupe fs.watch events within 100ms
+			var now = Date.now();
+			if (_lastWatched + 100 >= now) {
+				return;
+			}
+			_lastWatched = Date.now();
+
 			this.verbose && console.log('loading config at %s', this.configPath);
 			delete require.cache[this.configPath];
-			this._config = require(this.configPath);
-			this.getHosts().forEach(function (host) {
-				return _utils2['default'].normalizeHostConfig(_this2.getHostConfig(host));
-			});
+			try {
+				var config = require(this.configPath);
+				this._config = config;
+				this.getHosts().forEach(function (host) {
+					return _utils2['default'].normalizeHostConfig(_this2.getHostConfig(host));
+				});
+			} catch (e) {
+				console.error('Error loading configuration file, waiting for file change\n', e);
+			}
 		}
 	}, {
 		key: 'getHosts',
