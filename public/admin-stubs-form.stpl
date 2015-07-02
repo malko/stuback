@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Stuback - admin-stubs</title>
+	<link type="text/css" rel="stylesheet" href="/stuback/assets/styles.css" />
+</head>
+<body>
+	<h1>Stuback Admin - Stub</h1>
+	<div>
+		<label for="method">Http Method: </label>
+		<input id="method" type="text" placeholder="method" value="{{{method}}}"/>
+	</div>
+	<div>
+		<label for="host">Host: </label>
+		<input id="host" ²type="text" placeholder="host" value="{{{host}}}:{{{port}}}"/>
+	</div>
+	<div>
+		<label for="url">Stub Path: </label>
+		<input id="url" type="text" placeholder="path uri" value="{{{url}}}"/>
+	</div>
+	<div>
+		<label for="content">
+			Content:
+		</label>
+		<br />
+		<textarea id="content">{{content}}</textarea>
+	</div>
+	<footer>
+		<button class="red" onclick="if(confirm('are you sure you want to delete this stub?')) window.location='/stuback/admin-stubs/delete?path={{fileFullPath|encodeURIComponent}}'">delete</button>
+		<button onclick="window.location='/stuback/admin-stubs'">back</button>
+	</footer>
+</body>
+</html>

@@ -25,7 +25,8 @@
   "dependencies": {
     "connect": "^3.4.0",
     "mkdirp": "^0.5.1",
-    "path-to-regexp": "^0.1.6"
+    "path-to-regexp": "^0.1.6",
+    "stpl": "^0.1.2"
   },
   "devDependencies": {
     "babel": "^5.5.8"

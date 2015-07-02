@@ -30,13 +30,24 @@ var _utils = require('./utils');
 
 var _utils2 = _interopRequireDefault(_utils);
 
+var _config = require('./config');
+
+var _config2 = _interopRequireDefault(_config);
+
+// add stuback admin middlewares to the party
+
+var _admin = require('./admin');
+
+var _admin2 = _interopRequireDefault(_admin);
+
 var USERDIR = process.env[process.platform == 'win32' ? 'USERPROFILE' : 'HOME'];
 var PORTEXP = /:\d+$/;
 // a proxy should always remove thoose headers
 var PROXYREMOVEDHEADERS = ['host', 'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailer', 'transfer-encoding', 'upgrade']; //@FIXME the headers names in th connection header should be removed too.
 // some header we want to remove to control when we want to create a backup copy of the response
-var PROXYBACKUPREMOVEDHEADERS = ['if-modified-since', // avoid getting 304 response on browser refresh
-'accept-encoding' // we want human readable content
+var PROXYBACKUPREMOVEDHEADERS = [
+// avoid getting 304 response on browser refresh
+'if-modified-since', 'if-none-match', 'accept-encoding' // we want human readable content
 ];
 
 var HELP_MESSAGE = function HELP_MESSAGE(exitCode) {
@@ -100,18 +111,16 @@ if (!CLIOPTS.config) {
 		_fs2['default'].writeFileSync(CLIOPTS.config, DEFAULT_CONFIG);
 	}
 }
-var configPath = require.resolve(_path2['default'].normalize(CLIOPTS.config[0] === '/' ? CLIOPTS.config : process.cwd() + '/' + CLIOPTS.config));
-var config;
-function loadConfig() {
-	delete require.cache[configPath];
-	config = require(configPath);
-	// map config paths to regexps
-	Object.keys(config).forEach(function (hostKey) {
-		return _utils2['default'].normalizeHostConfig(config[hostKey]);
-	});
+var configPath;
+try {
+	configPath = require.resolve(_path2['default'].normalize(CLIOPTS.config[0] === '/' ? CLIOPTS.config : process.cwd() + '/' + CLIOPTS.config));
+} catch (e) {
+	console.error('Error loading configuration file %s', CLIOPTS.config);
+	process.exit(1);
 }
-loadConfig();
-_fs2['default'].watch(configPath, loadConfig);
+var config = new _config2['default'](configPath, CLIOPTS, function () {
+	return httpServer;
+});
 
 /**
  * This is the real proxy logic middleware
@@ -151,7 +160,7 @@ function proxyMiddleware(req, res, next) {
 
 	//- prepare request headers to proxyRequest and remove unwanted ones
 	options.backedBy && removedHeaders.push.apply(removedHeaders, PROXYBACKUPREMOVEDHEADERS);
-	removeHeadersExp = new RegExp('^(' + removedHeaders.join('|') + ')$');
+	removeHeadersExp = new RegExp('^(' + removedHeaders.join('|') + ')$', 'i');
 	Object.keys(req.headers).forEach(function (header) {
 		header.match(removeHeadersExp) || (requestOptions.headers[header] = req.headers[header]);
 	});
@@ -174,9 +183,13 @@ function proxyMiddleware(req, res, next) {
 	proxyReq = _http2['default'].request(requestOptions, function (proxyRes) {
 		proxyRes.pause();
 		// check for backed status code
-		if (hostConfig.backed && hostConfig.backed[options.backedBy] && hostConfig.backed[options.backedBy].onStatusCode && ~hostConfig.backed[options.backedBy].onStatusCode.indexOf(proxyRes.statusCode)) {
-			proxyRes.resume();
-			return onError('backedStatusCode');
+		if (options.backedBy) {
+			var backedCodes = hostConfig.backed.onStatusCode;
+			var pathCodes = hostConfig.backed[options.backedBy].onStatusCode;
+			var statusCode = proxyRes.statusCode;
+			if (backedCodes && ~backedCodes.indexOf(statusCode) || pathCodes && ~pathCodes.indexOf(statusCode)) {
+				return onError('Status code rejection(' + statusCode + ')');
+			}
 		}
 
 		//- copy proxyResponse headers to clientResponse, replacing and removing unwanted ones as set in hostConfig
@@ -245,11 +258,14 @@ function stubMiddleware(req, res, next) {
 		if (options.stubbedBy) {
 			_utils2['default'].applyResponseHeaders(res, hostConfig.stubs.responseHeaders);
 			_utils2['default'].applyResponseHeaders(res, hostConfig.stubs[options.stubbedBy].responseHeaders);
+			var statusCode = hostConfig.stubs[options.stubbedBy].statusCode;
+			statusCode && (res.statusCode = statusCode);
 		} else if (options.backedBy) {
 			_utils2['default'].applyResponseHeaders(res, hostConfig.backed.responseHeaders);
 			_utils2['default'].applyResponseHeaders(res, hostConfig.backed[options.backedBy].responseHeaders);
+			var statusCode = hostConfig.backed[options.backedBy].statusCode;
+			statusCode && (res.statusCode = statusCode);
 		}
-
 		var stub = _fs2['default'].createReadStream(stubFileName);
 		stub.pipe(res);
 	});
@@ -257,34 +273,22 @@ function stubMiddleware(req, res, next) {
 
 //----- STUBACK CONNECT APPLICATION -----//
 var app = (0, _connect2['default'])();
-
-//-- proxy auto config generation
-app.use('/proxy.pac', function (req, res, next) {
-	console.log('serving PAC for %s', req.connection.remoteAddress);
-	var address = httpServer.address();
-	var localAddress = (address.address.match(/^(|::)$/) ? '127.0.0.1' : address.address) + ':' + address.port;
-	var pacConfig = Object.keys(config).map(function (hostKey) {
-		var direct = config[hostKey].passthrough ? '; DIRECT' : '';
-		return 'if (shExpMatch(host, \'' + hostKey + '\')) return \'PROXY ' + localAddress + '' + direct + '\';';
-	}).join('\n\t');
-	res.setHeader('Content-Type', 'application/x-ns-proxy-autoconfig');
-	res.end('function FindProxyForURL(url, host) {\n\t' + pacConfig + '\n\treturn "DIRECT";\n}');
-});
+_admin2['default'].use(app, CLIOPTS, config);
 
 //-- do the real job
 app.use(function (req, res, next) {
 	var hostKey = req._parsedUrl.hostname || 'localhost';
+	var hostConfig = config.getHostConfig(hostKey);
 	VERBOSE && console.log('request received', hostKey, req.originalUrl);
 
 	//- if no hostConfig be a basic proxy
-	if (!config[hostKey]) {
+	if (!hostConfig) {
 		VERBOSE && console.log('proxying call to %s', hostKey);
 		return proxyMiddleware(req, res, next);
 	}
 
 	//- augment hostConfig with some values
-	var hostConfig = config[hostKey],
-	    url = req._parsedUrl.path,
+	var url = req._parsedUrl.path,
 	    middleWareOptions = {
 		stubbedBy: _utils2['default'].pathMatchingLookup(url, hostConfig.stubs),
 		backedBy: _utils2['default'].pathMatchingLookup(url, hostConfig.backed),
@@ -306,4 +310,4 @@ app.use(function (req, res, next) {
 
 //----- FINALLY START THE STUBACK SERVER -----//
 var httpServer = _http2['default'].createServer(app).listen(CLIOPTS.port);
-console.log('Stuback listening on port ' + CLIOPTS.port + '\nYou can use Automatic proxy configuration at http://localhost:' + CLIOPTS.port + '/proxy.pac\n');
+console.log('Stuback listening on port ' + CLIOPTS.port + '\nYou can use Automatic proxy configuration at http://localhost:' + CLIOPTS.port + '/stuback/proxy.pac\n');

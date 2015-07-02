@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Stuback - admin-stubs</title>
+	<link type="text/css" rel="stylesheet" href="/stuback/assets/styles.css" />
+</head>
+<body>
+	<h1>Stuback Admin - Stubs</h1>
+	<ul>
+	<strong>{{#hosts}}</strong><li>
+	{{name}}
+	<ul>
+		{{#stubPaths}}
+		<li><strong>{{path|decodeURIComponent}}</strong>
+			<ul>{{#stubs}}
+			<li>
+				<b>{{method}}</b> - {{name|decodeURIComponent}}
+				<span class="action">
+					<a href="/stuback/admin-stubs/view?path={{file|encodeURIComponent}}">view</a>
+					<a href="/stuback/admin-stubs/delete?path={{file|encodeURIComponent}}"
+						onclick="return confirm('are you sure you want to delete this stub?');"
+						class="red"
+					>delete</a>
+				</span>
+			</li>
+			{{/stubs}}</ul>
+		</li>
+		{{/stubPaths}}
+	</ul>
+	</li>{{/hosts}}
+	</ul>
+	<footer>
+		<button onclick="window.location='/stuback/admin'">back</button>
+	</footer>
+</body>
+</html>

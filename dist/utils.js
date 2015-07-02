@@ -14,7 +14,19 @@ var _crypto = require('crypto');
 
 var _crypto2 = _interopRequireDefault(_crypto);
 
-var IGNORED_PATH = ['responseHeaders'];
+var _path = require('path');
+
+var _path2 = _interopRequireDefault(_path);
+
+var IGNORED_PATH = ['responseHeaders', 'onStatusCode'];
+
+function cleanPath(path, encode) {
+	if (!path) {
+		return '';
+	}
+	path = path.replace(/\.\.+/g, '.').replace(/[\0;&<>\|\\]/g, '_');
+	return encode ? encodeURIComponent(path) : path;
+}
 
 /**
  * return a basic hash of the object passed in
@@ -34,7 +46,12 @@ function hashParams(v) {
  * @return {string} the stub path corresponding to this httpRequest
  */
 function getStubFileName(stubsPath, req) {
-	return stubsPath + (req._parsedUrl.hostname || req._parsedUrl.host || 'localhost') + '/' + req.method.toLowerCase() + '-' + (req._parsedUrl.path !== '/' ? encodeURIComponent(req._parsedUrl.path.replace(/^\//, '')) : '_') + (req.params ? hashParams(req.params) : '');
+	var parsedUrl = req._parsedUrl;
+	var hostname = parsedUrl.hostname || parsedUrl.host || 'localhost';
+	var port = parsedUrl.port || 80;
+	var pathname = _path2['default'].dirname(parsedUrl.pathname);
+	var filename = parsedUrl.path.substring(pathname.length).replace(/^\//, '');
+	return _path2['default'].normalize(stubsPath + '/' + hostname + ':' + port + '/' + cleanPath(pathname, true) + '/') + req.method.toLowerCase() + '-' + cleanPath(filename, true) + (req.params ? hashParams(req.params) : '');
 }
 
 function normalizeHostConfig(hostConfig) {
@@ -59,9 +76,7 @@ function normalizeHostConfigSection(hostConfig, section) {
 }
 
 function applyResponseHeaders(res, headers) {
-	headers && Object.keys(headers).filter(function (path) {
-		return ! ~IGNORED_PATH.indexOf(path);
-	}).forEach(function (header) {
+	headers && Object.keys(headers).forEach(function (header) {
 		if (headers[header]) {
 			res.setHeader(header, headers[header]);
 		} else {
@@ -78,11 +93,13 @@ function applyIncomingMessageHeaders(incoming, headers) {
 }
 
 function pathMatchingLookup(url, typeConfig) {
-	var path = undefined;
-	return typeConfig && Object.keys(typeConfig).some(function (_path) {
-		path = _path;
-		return typeConfig[path].use && url.match(typeConfig[path].exp);
-	}) ? path : false;
+	var matchedPath = undefined;
+	return typeConfig && Object.keys(typeConfig).filter(function (path) {
+		return ! ~IGNORED_PATH.indexOf(path);
+	}).some(function (path) {
+		matchedPath = path;
+		return typeConfig[matchedPath].use && url.match(typeConfig[matchedPath].exp);
+	}) ? matchedPath : false;
 }
 
 exports['default'] = { hashParams: hashParams, getStubFileName: getStubFileName, normalizeHostConfig: normalizeHostConfig, applyResponseHeaders: applyResponseHeaders, applyIncomingMessageHeaders: applyIncomingMessageHeaders, pathMatchingLookup: pathMatchingLookup };

@@ -1,7 +1,16 @@
 import pathToRegexp from 'path-to-regexp';
 import crypto from 'crypto';
+import path from 'path';
 
-const IGNORED_PATH = ['responseHeaders'];
+const IGNORED_PATH = ['responseHeaders', 'onStatusCode'];
+
+function cleanPath(path, encode) {
+	if (!path) {
+		return '';
+	}
+	path = path.replace(/\.\.+/g, '.').replace(/[\0;&<>\|\\]/g, '_');
+	return encode ? encodeURIComponent(path) : path;
+}
 
 /**
  * return a basic hash of the object passed in
@@ -21,8 +30,13 @@ function hashParams(v) {
  * @return {string} the stub path corresponding to this httpRequest
  */
 function getStubFileName(stubsPath, req) {
-	return stubsPath + (req._parsedUrl.hostname || req._parsedUrl.host || 'localhost') + '/' + req.method.toLowerCase() + '-' +
-		(req._parsedUrl.path !== '/' ? encodeURIComponent(req._parsedUrl.path.replace(/^\//, '')) : '_') +
+	let parsedUrl = req._parsedUrl;
+	let hostname = parsedUrl.hostname || parsedUrl.host || 'localhost';
+	let port = parsedUrl.port || 80;
+	let pathname = path.dirname(parsedUrl.pathname);
+	let filename = parsedUrl.path.substring(pathname.length).replace(/^\//, '');
+	return path.normalize(stubsPath + '/' + hostname + ':' + port + '/' + cleanPath(pathname, true) + '/') +
+		req.method.toLowerCase() + '-' + cleanPath(filename, true) +
 		(req.params ? hashParams(req.params) : '')
 	;
 }
@@ -51,7 +65,6 @@ function normalizeHostConfigSection(hostConfig, section) {
 
 function applyResponseHeaders(res, headers) {
 	headers && Object.keys(headers)
-		.filter((path) => !~IGNORED_PATH.indexOf(path))
 		.forEach((header) => {
 			if (headers[header]) {
 				res.setHeader(header, headers[header]);
@@ -70,11 +83,14 @@ function applyIncomingMessageHeaders(incoming, headers) {
 }
 
 function pathMatchingLookup(url, typeConfig) {
-	let path;
-	return (typeConfig && Object.keys(typeConfig).some((_path) => {
-		path = _path;
-		return typeConfig[path].use && url.match(typeConfig[path].exp);
-	})) ? path : false;
+	let matchedPath;
+	return (typeConfig && Object.keys(typeConfig)
+		.filter((path) => !~IGNORED_PATH.indexOf(path))
+		.some((path) => {
+			matchedPath = path;
+			return typeConfig[matchedPath].use && url.match(typeConfig[matchedPath].exp);
+		})) ? matchedPath : false
+	;
 }
 
 export default {hashParams, getStubFileName, normalizeHostConfig, applyResponseHeaders, applyIncomingMessageHeaders, pathMatchingLookup};

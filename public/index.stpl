@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Stuback - admin</title>
+	<link type="text/css" rel="stylesheet" href="/stuback/assets/styles.css" />
+</head>
+<body>
+	<h1>Stuback Admin</h1>
+	<b>Proxy Auto-Configuration file:</b> <a href="proxy.pac">http://{{localAddress}}/stuback/proxy.pac</a>
+	<br />
+	<a href="admin-stubs">List of stubs files</a>
+</body>
+</html>
