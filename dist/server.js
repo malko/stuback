@@ -310,4 +310,4 @@ app.use(function (req, res, next) {
 
 //----- FINALLY START THE STUBACK SERVER -----//
 var httpServer = _http2['default'].createServer(app).listen(CLIOPTS.port);
-console.log('Stuback listening on port ' + CLIOPTS.port + '\nYou can use Automatic proxy configuration at http://localhost:' + CLIOPTS.port + '/stuback/proxy.pac\n');
+console.log('Stuback listening on port ' + CLIOPTS.port + '\nYou can use Automatic proxy configuration at http://localhost:' + CLIOPTS.port + '/stuback/proxy.pac\nAdmin at http://localhost:' + CLIOPTS.port + '/stuback/admin\n');
