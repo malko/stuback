@@ -41,10 +41,14 @@ Check the documentation at https://github.com/stuback for more info about the co
 Options:
 -c, --config    config file to use default to USERDIR/.stuback.js
                 will create one if none exists
--h, --help      display this help
 -p, --port      port to bind stuback on default to 3000
 -s, --stubs     root directory of your stubs files (required)
+
+Flags:
+-h, --help      display this help
 -v, --verbose   turn on verbosity
+-l, --local     by default server accept request directed to any address
+                adding this flag will make the server accept request for 127.0.0.1 only
 `
 	);
 	process.exit(exitCode);
@@ -69,7 +73,8 @@ const CLIOPTS = {
 	port: 3000,
 	config: false,
 	stubsPath: false,
-	verbose: false
+	verbose: false,
+	local: false
 };
 process.argv.forEach((arg, id) => {
 	var argValue = process.argv[id + 1];
@@ -89,6 +94,10 @@ process.argv.forEach((arg, id) => {
 		case '-v':
 		case '--verbose':
 			CLIOPTS.verbose = true;
+			break;
+		case '-l':
+		case '--local':
+			CLIOPTS.local = true;
 			break;
 		case '-s':
 		case '--stubs':
@@ -304,7 +313,7 @@ app.use((req, res, next) => {
 });
 
 //----- FINALLY START THE STUBACK SERVER -----//
-var httpServer = http.createServer(app).listen(CLIOPTS.port);
+var httpServer = http.createServer(app).listen(CLIOPTS.port, CLIOPTS.local && '127.0.0.1');
 console.log(`Stuback listening on port ${CLIOPTS.port}
 You can use Automatic proxy configuration at http://localhost:${CLIOPTS.port}/stuback/proxy.pac
 Admin at http://localhost:${CLIOPTS.port}/stuback/admin
