@@ -111,7 +111,7 @@ module.exports = {
 				// *backedStatusCode* is a list of remote server statusCode you want to
 				// consider erroneous. So the actual stub file will be returned instead
 				// if the server respond with one of the given codes
-				onStatusCode: [404],
+				onStatusCode: [404, 500],
 
 				// don't include this, it's just here to tell you that it's a reserved name
 				exp: undefined
@@ -130,6 +130,10 @@ module.exports = {
 			'X-stuback-custom': 'stubacked'
 		}
 	}
+
+	// optional credentials for the admin section
+	adminLogin: 'login',
+	adminPass: 'Password'
 }
 ```
 

@@ -18,6 +18,8 @@ var _fs = require('fs');
 
 var _fs2 = _interopRequireDefault(_fs);
 
+var RESERVED_KEYS = ['adminLogin', 'adminPass'];
+
 var _lastWatched = 0;
 
 var Config = (function () {
@@ -64,7 +66,9 @@ var Config = (function () {
 	}, {
 		key: 'getHosts',
 		value: function getHosts() {
-			return Object.keys(this._config);
+			return Object.keys(this._config).filter(function (hostname) {
+				return ! ~RESERVED_KEYS.indexOf(hostname);
+			});
 		}
 	}, {
 		key: 'getHostConfig',
@@ -76,6 +80,14 @@ var Config = (function () {
 		value: function getLocalAddress() {
 			var address = this.getHttpServer().address();
 			return (address.address.match(/^(|::)$/) ? '127.0.0.1' : address.address) + ':' + address.port;
+		}
+	}, {
+		key: 'getAdminCredentials',
+		value: function getAdminCredentials() {
+			if (this._config.adminLogin && this._config.adminPass) {
+				return { login: this._config.adminLogin, pass: this._config.adminPass };
+			}
+			return null;
 		}
 	}]);
 

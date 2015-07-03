@@ -11,23 +11,41 @@ fs.readdirSync(templateDir).forEach((tplFile) => {
 	matches && stpl.registerString(matches[1], fs.readFileSync(path.normalize(templateDir + '/' + tplFile)).toString());
 });
 
-function redirect(res, url) {
-	res.writeHead(302, {Location: url});
-	res.end('');
-}
-
-function replyTemplate(res, tplName, tplData) {
-	res.setHeader('Content-Type', 'text/html');
-	res.setHeader('Pragma', 'no-cache');
-	try {
-		res.end(stpl(tplName, tplData));
-	} catch (e) {
-		res.end('Template generation error\n' + e.toString());
-	}
-}
-
 function use(app, CLIOPTS, config) {
 
+	function authenticate(req, res) {
+		let configCredentials = config.getAdminCredentials();
+		if (!configCredentials) {
+			return true;
+		}
+		res.setHeader('WWW-Authenticate', 'Basic realm="Stuback"');
+		let authorization = req.headers.authorization;
+		if (authorization) {
+			let token = authorization.split(/\s+/).pop() || '';
+			let auth = token && new Buffer(token, 'base64').toString().split(/:/);
+			if (auth && auth[0] === configCredentials.login && auth[1] === configCredentials.pass) {
+				return true;
+			}
+		}
+		res.statusCode = 401;
+		res.end('');
+		return false;
+	}
+
+	function redirect(res, url) {
+		res.writeHead(302, {Location: url});
+		res.end('');
+	}
+
+	function replyTemplate(res, tplName, tplData) {
+		res.setHeader('Content-Type', 'text/html');
+		res.setHeader('Pragma', 'no-cache');
+		try {
+			res.end(stpl(tplName, tplData));
+		} catch (e) {
+			res.end('Template generation error\n' + e.toString());
+		}
+	}
 	function decodeStubParam(req) {
 		return path.normalize(CLIOPTS.stubsPath + '/' + decodeURIComponent(req._parsedUrl.query
 			.replace(/^(.+&)?path=([^&#]+)(&.*)?$/, '$2')
@@ -77,6 +95,9 @@ function use(app, CLIOPTS, config) {
 	});
 
 	app.use('/stuback/admin-stubs/view', (req, res) => {
+		if (!authenticate(req, res)) {
+			return false;
+		}
 		var stubPath = decodeStubParam(req);
 		res.setHeader('Content-Type', 'text/plain');
 		let tplData = parseStubPath(stubPath);
@@ -91,6 +112,9 @@ function use(app, CLIOPTS, config) {
 	});
 
 	app.use('/stuback/admin-stubs/delete', (req, res) => {
+		if (!authenticate(req, res)) {
+			return false;
+		}
 		var stub = decodeStubParam(req);
 		fs.unlink(stub, (err) => {
 			if (err) {
@@ -103,6 +127,9 @@ function use(app, CLIOPTS, config) {
 
 	//-- list all stub files
 	app.use('/stuback/admin-stubs', (req, res) => {
+		if (!authenticate(req, res)) {
+			return false;
+		}
 		// prepare stubs list
 		let tplData = {hosts:[]};
 		fs.readdir(CLIOPTS.stubsPath, (err, hosts) => {
@@ -135,6 +162,9 @@ function use(app, CLIOPTS, config) {
 	});
 
 	app.use('/stuback/admin', function (req, res) {
+		if (!authenticate(req, res)) {
+			return false;
+		}
 		replyTemplate(res, 'index', {localAddress: config.getLocalAddress()});
 	});
 
@@ -149,6 +179,9 @@ function use(app, CLIOPTS, config) {
 	});
 
 	app.use('/stuback', function (req, res) {
+		if (!authenticate(req, res)) {
+			return false;
+		}
 		redirect(res, '/stuback/admin');
 	});
 }

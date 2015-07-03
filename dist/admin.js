@@ -27,23 +27,41 @@ _fs2['default'].readdirSync(templateDir).forEach(function (tplFile) {
 	matches && stpl.registerString(matches[1], _fs2['default'].readFileSync(_path2['default'].normalize(templateDir + '/' + tplFile)).toString());
 });
 
-function redirect(res, url) {
-	res.writeHead(302, { Location: url });
-	res.end('');
-}
-
-function replyTemplate(res, tplName, tplData) {
-	res.setHeader('Content-Type', 'text/html');
-	res.setHeader('Pragma', 'no-cache');
-	try {
-		res.end(stpl(tplName, tplData));
-	} catch (e) {
-		res.end('Template generation error\n' + e.toString());
-	}
-}
-
 function use(app, CLIOPTS, config) {
 
+	function authenticate(req, res) {
+		var configCredentials = config.getAdminCredentials();
+		if (!configCredentials) {
+			return true;
+		}
+		res.setHeader('WWW-Authenticate', 'Basic realm="Stuback"');
+		var authorization = req.headers.authorization;
+		if (authorization) {
+			var token = authorization.split(/\s+/).pop() || '';
+			var auth = token && new Buffer(token, 'base64').toString().split(/:/);
+			if (auth && auth[0] === configCredentials.login && auth[1] === configCredentials.pass) {
+				return true;
+			}
+		}
+		res.statusCode = 401;
+		res.end('');
+		return false;
+	}
+
+	function redirect(res, url) {
+		res.writeHead(302, { Location: url });
+		res.end('');
+	}
+
+	function replyTemplate(res, tplName, tplData) {
+		res.setHeader('Content-Type', 'text/html');
+		res.setHeader('Pragma', 'no-cache');
+		try {
+			res.end(stpl(tplName, tplData));
+		} catch (e) {
+			res.end('Template generation error\n' + e.toString());
+		}
+	}
 	function decodeStubParam(req) {
 		return _path2['default'].normalize(CLIOPTS.stubsPath + '/' + decodeURIComponent(req._parsedUrl.query.replace(/^(.+&)?path=([^&#]+)(&.*)?$/, '$2').replace(/\.+/, '.').replace(/\0/, '')));
 	}
@@ -92,6 +110,9 @@ function use(app, CLIOPTS, config) {
 	});
 
 	app.use('/stuback/admin-stubs/view', function (req, res) {
+		if (!authenticate(req, res)) {
+			return false;
+		}
 		var stubPath = decodeStubParam(req);
 		res.setHeader('Content-Type', 'text/plain');
 		var tplData = parseStubPath(stubPath);
@@ -106,6 +127,9 @@ function use(app, CLIOPTS, config) {
 	});
 
 	app.use('/stuback/admin-stubs/delete', function (req, res) {
+		if (!authenticate(req, res)) {
+			return false;
+		}
 		var stub = decodeStubParam(req);
 		_fs2['default'].unlink(stub, function (err) {
 			if (err) {
@@ -118,6 +142,9 @@ function use(app, CLIOPTS, config) {
 
 	//-- list all stub files
 	app.use('/stuback/admin-stubs', function (req, res) {
+		if (!authenticate(req, res)) {
+			return false;
+		}
 		// prepare stubs list
 		var tplData = { hosts: [] };
 		_fs2['default'].readdir(CLIOPTS.stubsPath, function (err, hosts) {
@@ -150,6 +177,9 @@ function use(app, CLIOPTS, config) {
 	});
 
 	app.use('/stuback/admin', function (req, res) {
+		if (!authenticate(req, res)) {
+			return false;
+		}
 		replyTemplate(res, 'index', { localAddress: config.getLocalAddress() });
 	});
 
@@ -164,6 +194,9 @@ function use(app, CLIOPTS, config) {
 	});
 
 	app.use('/stuback', function (req, res) {
+		if (!authenticate(req, res)) {
+			return false;
+		}
 		redirect(res, '/stuback/admin');
 	});
 }

@@ -1,6 +1,8 @@
 import utils from './utils';
 import fs from 'fs';
 
+const RESERVED_KEYS = ['adminLogin', 'adminPass'];
+
 var _lastWatched = 0;
 class Config{
 	constructor(configPath, CLIOPTS, getHttpServerMethod) {
@@ -33,7 +35,7 @@ class Config{
 	}
 
 	getHosts() {
-		return Object.keys(this._config);
+		return Object.keys(this._config).filter((hostname) => !~RESERVED_KEYS.indexOf(hostname));
 	}
 
 	getHostConfig(hostname) {
@@ -43,6 +45,13 @@ class Config{
 	getLocalAddress() {
 		let address = this.getHttpServer().address();
 		return (address.address.match(/^(|::)$/) ? '127.0.0.1' : address.address) + ':' + address.port;
+	}
+
+	getAdminCredentials() {
+		if (this._config.adminLogin && this._config.adminPass) {
+			return {login: this._config.adminLogin, pass: this._config.adminPass};
+		}
+		return null;
 	}
 }
 
