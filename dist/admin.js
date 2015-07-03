@@ -103,7 +103,7 @@ function use(app, CLIOPTS, config) {
 		var localAddress = config.getLocalAddress();
 		var pacConfig = config.getHosts().map(function (hostKey) {
 			var direct = config.getHostConfig(hostKey).passthrough ? '; DIRECT' : '';
-			return 'if (shExpMatch(host, \'' + hostKey + '\')) return \'PROXY ' + localAddress + '' + direct + '\';';
+			return 'if (shExpMatch(host, \'' + hostKey + '\')) return \'PROXY ' + localAddress + direct + '\';';
 		}).join('\n\t');
 		res.setHeader('Content-Type', 'application/x-ns-proxy-autoconfig');
 		res.end('function FindProxyForURL(url, host) {\n\t' + pacConfig + '\n\treturn "DIRECT";\n}');

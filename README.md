@@ -162,6 +162,8 @@ stubs will be organised and looked-up in the following way:
 ```
 use the --verbose option to see which files stuback is trying to reach, so you can easily copy/paste names to create new stubs files.
 
+### Access to the admin section:
+You can access the admin section pointing to http://localhost:3000/stuback/admin
 
 ## This is for the DEV
 Stuback is in no way intended to be used for anything else than development.
