@@ -51,7 +51,7 @@ function getStubFileName(stubsPath, req) {
 	var port = parsedUrl.port || 80;
 	var pathname = _path2['default'].dirname(parsedUrl.pathname);
 	var filename = parsedUrl.path.substring(pathname.length).replace(/^\//, '');
-	return _path2['default'].normalize(stubsPath + '/' + hostname + ':' + port + '/' + cleanPath(pathname, true) + '/') + req.method.toLowerCase() + '-' + cleanPath(filename, true) + (req.params ? hashParams(req.params) : '');
+	return _path2['default'].normalize(stubsPath + '/' + hostname + '-' + port + '/' + cleanPath(pathname, true) + '/') + req.method.toLowerCase() + '-' + cleanPath(filename, true) + (req.params ? hashParams(req.params) : '');
 }
 
 function normalizeHostConfig(hostConfig) {

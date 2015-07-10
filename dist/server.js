@@ -51,7 +51,7 @@ var PROXYBACKUPREMOVEDHEADERS = [
 ];
 
 var HELP_MESSAGE = function HELP_MESSAGE(exitCode) {
-	console.log('Stuback is a proxy server to ease api development.\n\nYou can use Automatic proxy configuration at http://localhost:port/proxy.pac\n\nUsage:\nstuback [options] --stubs stubRootDir\nwhere stubRootDir arguments is the root directory to store your stubs.\ne.g.\nstuback -p 3000 -c stuback.js ./stubs\n\nCheck the documentation at https://github.com/stuback for more info about the config file.\n\nOptions:\n-c, --config    config file to use default to USERDIR/.stuback.js\n                will create one if none exists\n-p, --port      port to bind stuback on default to 3000\n-s, --stubs     root directory of your stubs files (required)\n\nFlags:\n-h, --help      display this help\n-v, --verbose   turn on verbosity\n-l, --local     by default server accept request directed to any address\n                adding this flag will make the server accept request for 127.0.0.1 only\n');
+	console.log('Stuback is a proxy server to ease api development.\n\nYou can use Automatic proxy configuration at http://localhost:port/proxy.pac\n\nUsage:\nstuback [options] --stubs stubRootDir\nwhere stubRootDir arguments is the root directory to store your stubs.\ne.g.\nstuback -p 3000 -c stuback.js -s ./stubs\n\nCheck the documentation at https://github.com/stuback for more info about the config file.\n\nOptions:\n-c, --config    config file to use default to USERDIR/.stuback.js\n                will create one if none exists\n-p, --port      port to bind stuback on default to 3000\n-s, --stubs     root directory of your stubs files (required)\n\nFlags:\n-h, --help      display this help\n-v, --verbose   turn on verbosity\n-l, --local     by default server accept request directed to any address\n                adding this flag will make the server accept request for 127.0.0.1 only\n');
 	process.exit(exitCode);
 };
 
@@ -136,7 +136,7 @@ var config = new _config2['default'](configPath, CLIOPTS, function () {
  * @param {*} options = {} contains the hostConfig options + some boolean values about the way the middleware should work (backedBy mainly)
  */
 function proxyMiddleware(req, res, next) {
-	var options = arguments[3] === undefined ? {} : arguments[3];
+	var options = arguments.length <= 3 || arguments[3] === undefined ? {} : arguments[3];
 
 	req.pause();
 	var hostConfig = options.hostConfig || {},
@@ -242,7 +242,7 @@ function proxyMiddleware(req, res, next) {
  * @param {*} options = {} contains the hostConfig options + some boolean values about the way the middleware should work
  */
 function stubMiddleware(req, res, next) {
-	var options = arguments[3] === undefined ? {} : arguments[3];
+	var options = arguments.length <= 3 || arguments[3] === undefined ? {} : arguments[3];
 
 	var stubFileName = _utils2['default'].getStubFileName(CLIOPTS.stubsPath, req),
 	    hostConfig = options.hostConfig;
