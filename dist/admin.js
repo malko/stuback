@@ -72,7 +72,7 @@ function use(app, CLIOPTS, config) {
 		    port = undefined,
 		    basename = undefined,
 		    method = undefined;
-		var fullPath = file.replace(/^([^:]+):(\d+)\//, function (m, h, p) {
+		var fullPath = file.replace(/^([^\/]+)-(\d+)[\/\\]/, function (m, h, p) {
 			host = h, method;
 			port = p;
 			return '';

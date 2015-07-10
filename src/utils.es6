@@ -35,7 +35,7 @@ function getStubFileName(stubsPath, req) {
 	let port = parsedUrl.port || 80;
 	let pathname = path.dirname(parsedUrl.pathname);
 	let filename = parsedUrl.path.substring(pathname.length).replace(/^\//, '');
-	return path.normalize(stubsPath + '/' + hostname + ':' + port + '/' + cleanPath(pathname, true) + '/') +
+	return path.normalize(stubsPath + '/' + hostname + '-' + port + '/' + cleanPath(pathname, true) + '/') +
 		req.method.toLowerCase() + '-' + cleanPath(filename, true) +
 		(req.params ? hashParams(req.params) : '')
 	;

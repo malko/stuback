@@ -34,7 +34,7 @@ Usage:
 stuback [options] --stubs stubRootDir
 where stubRootDir arguments is the root directory to store your stubs.
 e.g.
-stuback -p 3000 -c stuback.js ./stubs
+stuback -p 3000 -c stuback.js -s ./stubs
 
 Check the documentation at https://github.com/stuback for more info about the config file.
 

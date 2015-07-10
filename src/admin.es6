@@ -57,7 +57,7 @@ function use(app, CLIOPTS, config) {
 	function parseStubPath(stubPath) {
 		let file = stubPath.slice(CLIOPTS.stubsPath.length);
 		let host, port, basename, method;
-		let fullPath = file.replace(/^([^:]+):(\d+)\//, (m, h, p) => {
+		let fullPath = file.replace(/^([^\/]+)-(\d+)[\/\\]/, (m, h, p) => {
 			host = h, method;
 			port = p;
 			return '';
