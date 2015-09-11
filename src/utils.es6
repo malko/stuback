@@ -64,7 +64,7 @@ function normalizeHostConfigSection(hostConfig, section) {
 }
 
 function applyResponseHeaders(res, headers) {
-	headers && Object.keys(headers)
+	!res.headersSent && headers && Object.keys(headers)
 		.forEach((header) => {
 			if (headers[header]) {
 				res.setHeader(header, headers[header]);
