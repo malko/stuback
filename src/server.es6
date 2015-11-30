@@ -180,6 +180,7 @@ function proxyMiddleware(req, res, next, options = {}) {
 
 	let hostConfig = options.hostConfig || {},
 		requestOptions = proxyReqOptions(req, options),
+		logStr = `${requestOptions.method}(http://${requestOptions.hostname}:${requestOptions.port || 80}${requestOptions.path})`,
 		proxyReq,
 		cacheStream
 	;
@@ -195,7 +196,7 @@ function proxyMiddleware(req, res, next, options = {}) {
 		}
 	}
 
-	VERBOSE && console.log('proxying to %s(http://%s:%s%s)', requestOptions.method, requestOptions.hostname, requestOptions.port || 80, requestOptions.path);
+	VERBOSE && console.log('proxying to %s', logStr);
 
 	//- launch the proxyRequest
 	proxyReq = http.request(requestOptions, (proxyRes) => {
@@ -206,7 +207,7 @@ function proxyMiddleware(req, res, next, options = {}) {
 			let pathCodes = hostConfig.backed[options.backedBy].onStatusCode;
 			let statusCode = proxyRes.statusCode;
 			if ((backedCodes && ~backedCodes.indexOf(statusCode)) || (pathCodes && ~pathCodes.indexOf(statusCode))) {
-				return onError('Status code rejection(' + statusCode + ')');
+				return onError('Status code rejection(' + statusCode + ') at ' + logStr);
 			}
 		}
 
@@ -216,16 +217,21 @@ function proxyMiddleware(req, res, next, options = {}) {
 		if (hostConfig.responseHeaders) {
 			utils.applyIncomingMessageHeaders(proxyRes, hostConfig.responseHeaders);
 		}
+		if (options.backedBy) { // @FIXME WHAT DO WE REALLY WANT ABOUT PROXYIED HEADERS
+			utils.applyIncomingMessageHeaders(proxyRes, hostConfig.backed.responseHeaders);
+			utils.applyIncomingMessageHeaders(proxyRes, hostConfig.backed[options.backedBy].responseHeaders);
+		}
 		res.writeHead(proxyRes.statusCode, proxyRes.headers);
 
-		//- manage backup copy if necessary
+		//- manage backup copy if necessary + apply backed headers
 		if (options.backedBy) {
+
 			let stubFileName = utils.getStubFileName(CLIOPTS.stubsPath, req);
 			let stubDirname = path.dirname(stubFileName);
 			fs.existsSync(stubDirname) || mkdirp.sync(stubDirname);
 			cacheStream = fs.createWriteStream(stubFileName);
 			cacheStream.on('close', () => {
-				VERBOSE && console.log('backed in %s', stubFileName);
+				VERBOSE && console.log('%s backed in %s', logStr, stubFileName);
 			});
 			proxyRes.pipe(cacheStream);
 		}
@@ -234,7 +240,10 @@ function proxyMiddleware(req, res, next, options = {}) {
 		proxyRes.pipe(res);
 		proxyRes.resume();
 	});
-
+	hostConfig.timeout && proxyReq.setTimeout(hostConfig.timeout, function () {
+		VERBOSE && console.log('TIMEOUT on poxying %s', logStr);
+		proxyReq.abort();
+	});
 	proxyReq.on('error', onError);
 
 	//- finaly piping clientReqest body to proxyRequest

@@ -238,7 +238,10 @@ function proxyMiddleware(req, res, next) {
 		proxyRes.pipe(res);
 		proxyRes.resume();
 	});
-
+	hostConfig.timeout && proxyReq.setTimeout(hostConfig.timeout, function () {
+		VERBOSE && console.log('TIMEOUT on poxying %s', logStr);
+		proxyReq.abort();
+	});
 	proxyReq.on('error', onError);
 
 	//- finaly piping clientReqest body to proxyRequest
