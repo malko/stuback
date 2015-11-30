@@ -340,7 +340,7 @@ app.use((req, res, next) => {
 
 //----- FINALLY START THE STUBACK SERVER -----//
 function startServer() {
-	httpServer = http.createServer(app).listen(CLIOPTS.port, CLIOPTS.local && '127.0.0.1');
+	httpServer = http.createServer(app).listen(CLIOPTS.port, CLIOPTS.local && '127.0.0.1' || '0.0.0.0');
 	httpServer.on('upgrade', function (req, socket, head) {
 		setSocket(socket);
 
