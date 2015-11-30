@@ -78,7 +78,12 @@ function normalizeHostConfigSection(hostConfig, section) {
 function applyResponseHeaders(res, headers) {
 	!res.headersSent && headers && Object.keys(headers).forEach(function (header) {
 		if (headers[header]) {
-			res.setHeader(header, headers[header]);
+			var headerLC = header.toLowerCase();
+			if (headerLC === 'set-cookie') {
+				res.setHeader(header, headers[header].replace(/;\s*domain=[^;]+/i, '')); // we need to remove domain
+			} else {
+				res.setHeader(header, headers[header]);
+			}
 		} else {
 			res.removeHeader(header);
 		}

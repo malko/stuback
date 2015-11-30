@@ -181,12 +181,14 @@ function proxyMiddleware(req, res, next) {
 
 	var hostConfig = options.hostConfig || {},
 	    requestOptions = proxyReqOptions(req, options),
+	    logStr = requestOptions.method + '(http://' + requestOptions.hostname + ':' + (requestOptions.port || 80) + requestOptions.path + ')',
 	    proxyReq = undefined,
 	    cacheStream = undefined;
 
 	//- on proxy error we need to either try to return a stub or pass to the connect middleware
 	function onError(err) {
 		VERBOSE && console.error('ERROR', err);
+		proxyReq.abort();
 		if (options.backedBy) {
 			options.hostConfig.passthrough = false;
 			stubMiddleware(req, res, next, options);
@@ -195,7 +197,7 @@ function proxyMiddleware(req, res, next) {
 		}
 	}
 
-	VERBOSE && console.log('proxying to %s(http://%s:%s%s)', requestOptions.method, requestOptions.hostname, requestOptions.port || 80, requestOptions.path);
+	VERBOSE && console.log('proxying to %s', logStr);
 
 	//- launch the proxyRequest
 	proxyReq = _http2['default'].request(requestOptions, function (proxyRes) {
@@ -206,7 +208,7 @@ function proxyMiddleware(req, res, next) {
 			var pathCodes = hostConfig.backed[options.backedBy].onStatusCode;
 			var statusCode = proxyRes.statusCode;
 			if (backedCodes && ~backedCodes.indexOf(statusCode) || pathCodes && ~pathCodes.indexOf(statusCode)) {
-				return onError('Status code rejection(' + statusCode + ')');
+				return onError('Status code rejection(' + statusCode + ') at ' + logStr);
 			}
 		}
 
@@ -218,17 +220,23 @@ function proxyMiddleware(req, res, next) {
 		if (hostConfig.responseHeaders) {
 			_utils2['default'].applyIncomingMessageHeaders(proxyRes, hostConfig.responseHeaders);
 		}
+		if (options.backedBy) {
+			// @FIXME WHAT DO WE REALLY WANT ABOUT PROXYIED HEADERS
+			_utils2['default'].applyIncomingMessageHeaders(proxyRes, hostConfig.backed.responseHeaders);
+			_utils2['default'].applyIncomingMessageHeaders(proxyRes, hostConfig.backed[options.backedBy].responseHeaders);
+		}
 		res.writeHead(proxyRes.statusCode, proxyRes.headers);
 
-		//- manage backup copy if necessary
+		//- manage backup copy if necessary + apply backed headers
 		if (options.backedBy) {
 			(function () {
+
 				var stubFileName = _utils2['default'].getStubFileName(CLIOPTS.stubsPath, req);
 				var stubDirname = _path2['default'].dirname(stubFileName);
 				_fs2['default'].existsSync(stubDirname) || _mkdirp2['default'].sync(stubDirname);
 				cacheStream = _fs2['default'].createWriteStream(stubFileName);
 				cacheStream.on('close', function () {
-					VERBOSE && console.log('backed in %s', stubFileName);
+					VERBOSE && console.log('%s backed in %s', logStr, stubFileName);
 				});
 				proxyRes.pipe(cacheStream);
 			})();
@@ -274,7 +282,7 @@ function stubMiddleware(req, res, next) {
 			}
 			return next();
 		}
-		VERBOSE && console.log('Reply with get/%s', _path2['default'].basename(stubFileName));
+		VERBOSE && console.log('Reply with %s', _path2['default'].basename(stubFileName));
 		_utils2['default'].applyResponseHeaders(res, hostConfig.responseHeaders);
 		if (options.stubbedBy) {
 			_utils2['default'].applyResponseHeaders(res, hostConfig.stubs.responseHeaders);
@@ -289,6 +297,10 @@ function stubMiddleware(req, res, next) {
 		}
 		var stub = _fs2['default'].createReadStream(stubFileName);
 		stub.pipe(res);
+		stub.on('error', function (err) {
+			VERBOSE && console.log('Read file error %s', _path2['default'].basename(stubFileName), err);
+			res.end();
+		});
 	});
 }
 
@@ -322,8 +334,9 @@ app.use(function (req, res, next) {
 		stubMiddleware(req, res, next, middleWareOptions);
 	} else if (middleWareOptions.backedBy) {
 		proxyMiddleware(req, res, next, middleWareOptions);
-	} else if (middleWareOptions.passthrough) {
-		proxyMiddleware(req, res, next);
+	} else if (hostConfig.passthrough) {
+		VERBOSE && console.log('proxying call to %s', hostKey);
+		proxyMiddleware(req, res, next, middleWareOptions);
 	} else {
 		next();
 	}
@@ -331,7 +344,7 @@ app.use(function (req, res, next) {
 
 //----- FINALLY START THE STUBACK SERVER -----//
 function startServer() {
-	httpServer = _http2['default'].createServer(app).listen(CLIOPTS.port, CLIOPTS.local && '127.0.0.1');
+	httpServer = _http2['default'].createServer(app).listen(CLIOPTS.port, CLIOPTS.local && '127.0.0.1' || '0.0.0.0');
 	httpServer.on('upgrade', function (req, socket, head) {
 		setSocket(socket);
 
