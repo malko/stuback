@@ -47,6 +47,9 @@ module.exports = {
 		// You probably want true for a system defined proxy and probably in most cases
 		passthrough: true,
 
+		// default proxyied request doesn't timeout. You can set a timeout on a by host basis.
+		timeout: 5000,
+
 		/***************************************************************************
 		* *stubs* contains a list of path which will be looked up for a stub file. *
 		***************************************************************************/

@@ -39,16 +39,16 @@ stuback -p 3000 -c stuback.js -s ./stubs
 Check the documentation at https://github.com/stuback for more info about the config file.
 
 Options:
--c, --config    config file to use default to USERDIR/.stuback.js
-                will create one if none exists
--p, --port      port to bind stuback on default to 3000
--s, --stubs     root directory of your stubs files (required)
+-c, --config	config file to use default to USERDIR/.stuback.js
+				will create one if none exists
+-p, --port	  port to bind stuback on default to 3000
+-s, --stubs	 root directory of your stubs files (required)
 
 Flags:
--h, --help      display this help
+-h, --help	  display this help
 -v, --verbose   turn on verbosity
--l, --local     by default server accept request directed to any address
-                adding this flag will make the server accept request for 127.0.0.1 only
+-l, --local	 by default server accept request directed to any address
+				adding this flag will make the server accept request for 127.0.0.1 only
 `
 	);
 	process.exit(exitCode);
@@ -123,50 +123,26 @@ if (!CLIOPTS.config) { // use default configuration path and init config file if
 		fs.writeFileSync(CLIOPTS.config, DEFAULT_CONFIG);
 	}
 }
-var configPath;
+var configPath, config, httpServer;
 try {
 	configPath = require.resolve(path.normalize(CLIOPTS.config[0] === '/' ? CLIOPTS.config : (process.cwd() + '/' + CLIOPTS.config)));
 } catch (e) {
 	console.error('Error loading configuration file %s', CLIOPTS.config);
 	process.exit(1);
 }
-var config = new Config(configPath, CLIOPTS, () => httpServer);
+config = new Config(configPath, CLIOPTS, () => httpServer);
 
-/**
- * This is the real proxy logic middleware
- * It is not use as a direct middleware but rather called by the main stuback middleware
- * @param {httpRequest} req the request received by the main stuback middleware
- * @param {httpResponse} res the response used to by the main stuback middleware to reply to the connected client
- * @param {Function} next the next method to call next connect middleware in the main middleware
- * @param {*} options = {} contains the hostConfig options + some boolean values about the way the middleware should work (backedBy mainly)
- */
-function proxyMiddleware(req, res, next, options = {}) {
-	req.pause();
-	let hostConfig = options.hostConfig || {},
+function proxyReqOptions(req, options = {}) {
+	var hostConfig = options.hostConfig || {},
 		requestOptions = {
 			hostname: hostConfig.targetHost || req._parsedUrl.hostname || req._parsedUrl.host || req.headers.host.replace(/:\d+$/, ''),
 			path: req._parsedUrl.path,
 			method: req.method,
-			headers: {'X-Forwarded-For': req.connection.remoteAddress}
+			headers: {'X-Forwarded-For': req.connection.remoteAddress} // @FIXME handle previous values + for,port,proto
 		},
 		removedHeaders = PROXYREMOVEDHEADERS.slice(),
-		removeHeadersExp,
-		port,
-		proxyReq,
-		cacheStream
+		removeHeadersExp, port
 	;
-
-	//- on proxy error we need to either try to return a stub or pass to the connect middleware
-	function onError(err) {
-		VERBOSE && console.error('ERROR', err);
-		if (options.backedBy) {
-			options.hostConfig.passthrough = false;
-			stubMiddleware(req, res, next, options);
-		} else {
-			next(err);
-		}
-	}
-
 	//- prepare request headers to proxyRequest and remove unwanted ones
 	options.backedBy && removedHeaders.push(...PROXYBACKUPREMOVEDHEADERS);
 	removeHeadersExp = new RegExp(`^(${removedHeaders.join('|')})$`, 'i');
@@ -184,7 +160,44 @@ function proxyMiddleware(req, res, next, options = {}) {
 	}
 	port && (requestOptions.port = port);
 
-	VERBOSE && console.log('proxying to %s(http://%s:%s%s)', requestOptions.method, requestOptions.hostname, requestOptions.port || 80, requestOptions.path);
+	return requestOptions;
+}
+
+/**
+ * This is the real proxy logic middleware
+ * It is not use as a direct middleware but rather called by the main stuback middleware
+ * @param {httpRequest} req the request received by the main stuback middleware
+ * @param {httpResponse} res the response used to by the main stuback middleware to reply to the connected client
+ * @param {Function} next the next method to call next connect middleware in the main middleware
+ * @param {*} options = {} contains the hostConfig options + some boolean values about the way the middleware should work (backedBy mainly)
+ */
+function proxyMiddleware(req, res, next, options = {}) {
+	req.pause();
+
+	if (req.method === 'GET' && req.headers.upgrade) {
+		console.log('WebSocket Ugrade request', req.headers.upgrade);
+	}
+
+	let hostConfig = options.hostConfig || {},
+		requestOptions = proxyReqOptions(req, options),
+		logStr = `${requestOptions.method}(http://${requestOptions.hostname}:${requestOptions.port || 80}${requestOptions.path})`,
+		proxyReq,
+		cacheStream
+	;
+
+	//- on proxy error we need to either try to return a stub or pass to the connect middleware
+	function onError(err) {
+		VERBOSE && console.error('ERROR', err);
+		proxyReq.abort();
+		if (options.backedBy) {
+			options.hostConfig.passthrough = false;
+			stubMiddleware(req, res, next, options);
+		} else {
+			next(err);
+		}
+	}
+
+	VERBOSE && console.log('proxying to %s', logStr);
 
 	//- launch the proxyRequest
 	proxyReq = http.request(requestOptions, (proxyRes) => {
@@ -195,7 +208,7 @@ function proxyMiddleware(req, res, next, options = {}) {
 			let pathCodes = hostConfig.backed[options.backedBy].onStatusCode;
 			let statusCode = proxyRes.statusCode;
 			if ((backedCodes && ~backedCodes.indexOf(statusCode)) || (pathCodes && ~pathCodes.indexOf(statusCode))) {
-				return onError('Status code rejection(' + statusCode + ')');
+				return onError('Status code rejection(' + statusCode + ') at ' + logStr);
 			}
 		}
 
@@ -205,16 +218,21 @@ function proxyMiddleware(req, res, next, options = {}) {
 		if (hostConfig.responseHeaders) {
 			utils.applyIncomingMessageHeaders(proxyRes, hostConfig.responseHeaders);
 		}
+		if (options.backedBy) { // @FIXME WHAT DO WE REALLY WANT ABOUT PROXYIED HEADERS
+			utils.applyIncomingMessageHeaders(proxyRes, hostConfig.backed.responseHeaders);
+			utils.applyIncomingMessageHeaders(proxyRes, hostConfig.backed[options.backedBy].responseHeaders);
+		}
 		res.writeHead(proxyRes.statusCode, proxyRes.headers);
 
-		//- manage backup copy if necessary
+		//- manage backup copy if necessary + apply backed headers
 		if (options.backedBy) {
+
 			let stubFileName = utils.getStubFileName(CLIOPTS.stubsPath, req);
 			let stubDirname = path.dirname(stubFileName);
 			fs.existsSync(stubDirname) || mkdirp.sync(stubDirname);
 			cacheStream = fs.createWriteStream(stubFileName);
 			cacheStream.on('close', () => {
-				VERBOSE && console.log('backed in %s', stubFileName);
+				VERBOSE && console.log('%s backed in %s', logStr, stubFileName);
 			});
 			proxyRes.pipe(cacheStream);
 		}
@@ -223,7 +241,10 @@ function proxyMiddleware(req, res, next, options = {}) {
 		proxyRes.pipe(res);
 		proxyRes.resume();
 	});
-
+	hostConfig.timeout && proxyReq.setTimeout(hostConfig.timeout, function () {
+		VERBOSE && console.log('TIMEOUT on poxying %s', logStr);
+		proxyReq.abort();
+	});
 	proxyReq.on('error', onError);
 
 	//- finaly piping clientReqest body to proxyRequest
@@ -253,7 +274,7 @@ function stubMiddleware(req, res, next, options = {}) {
 			}
 			return next();
 		}
-		VERBOSE && console.log('Reply with get/%s', path.basename(stubFileName));
+		VERBOSE && console.log('Reply with %s', path.basename(stubFileName));
 		utils.applyResponseHeaders(res, hostConfig.responseHeaders);
 		if (options.stubbedBy) {
 			utils.applyResponseHeaders(res, hostConfig.stubs.responseHeaders);
@@ -268,6 +289,10 @@ function stubMiddleware(req, res, next, options = {}) {
 		}
 		let stub = fs.createReadStream(stubFileName);
 		stub.pipe(res);
+		stub.on('error', function (err) {
+			VERBOSE && console.log('Read file error %s', path.basename(stubFileName), err);
+			res.end();
+		});
 	});
 }
 
@@ -305,16 +330,100 @@ app.use((req, res, next) => {
 		stubMiddleware(req, res, next, middleWareOptions);
 	} else if (middleWareOptions.backedBy) {
 		proxyMiddleware(req, res, next, middleWareOptions);
-	} else if (middleWareOptions.passthrough) {
-		proxyMiddleware(req, res, next);
+	} else if (hostConfig.passthrough) {
+		VERBOSE && console.log('proxying call to %s', hostKey);
+		proxyMiddleware(req, res, next, middleWareOptions);
 	} else {
 		next();
 	}
 });
 
 //----- FINALLY START THE STUBACK SERVER -----//
-var httpServer = http.createServer(app).listen(CLIOPTS.port, CLIOPTS.local && '127.0.0.1');
-console.log(`Stuback listening on port ${CLIOPTS.port}
+function startServer() {
+	httpServer = http.createServer(app).listen(CLIOPTS.port, CLIOPTS.local && '127.0.0.1' || '0.0.0.0');
+	httpServer.on('upgrade', function (req, socket, head) {
+		setSocket(socket);
+
+		head && head.length && socket.unshift(head);
+		var reqOptions = proxyReqOptions(req);
+		var proxyReq = http.request(reqOptions);
+
+		proxyReq.on('error', (err) => {
+			console.log('error while upgrading', err);
+			onOutgoingError(err);
+		});
+		proxyReq.on('response', function (res) {
+			// if upgrade event isn't going to happen, close the socket
+			if (!res.upgrade) socket.end();
+		});
+		proxyReq.on('upgrade', function (proxyRes, proxySocket, proxyHead) {
+			proxySocket.on('error', (err) => {
+				console.log('proxied websocket error', err);
+				onOutgoingError(err);
+			});
+
+			// Allow us to listen when the websocket has completed
+			proxySocket.on('end', function () {
+				httpServer.emit('close', proxyRes, proxySocket, proxyHead);
+			});
+
+			// The pipe below will end proxySocket if socket closes cleanly, but not
+			// if it errors (eg, vanishes from the net and starts returning
+			// EHOSTUNREACH). We need to do that explicitly.
+			socket.on('error', function () {
+				proxySocket.end();
+			});
+
+			setSocket(socket);
+
+			if (proxyHead && proxyHead.length) proxySocket.unshift(proxyHead);
+
+			// Remark: Handle writing the headers to the socket when switching protocols
+			// Also handles when a header is an array
+			socket.write(
+				Object.keys(proxyRes.headers).reduce(function (head, key) {
+					var value = proxyRes.headers[key];
+
+					if (!Array.isArray(value)) {
+						head.push(key + ': ' + value);
+						return head;
+					}
+
+					for (var i = 0; i < value.length; i++) {
+						head.push(key + ': ' + value[i]);
+					}
+					return head;
+				}, ['HTTP/1.1 101 Switching Protocols'])
+				.join('\r\n') + '\r\n\r\n'
+			);
+
+			proxySocket.pipe(socket).pipe(proxySocket);
+
+		});
+		function setSocket(socket) {
+			socket.setTimeout(0);
+			socket.setNoDelay(true);
+			socket.setKeepAlive(true, 0);
+			return socket;
+		}
+		function onOutgoingError(err) {
+			httpServer.emit('error', err, req, socket);
+			socket.end();
+		}
+
+		console.log(req, socket, head);
+	});
+	console.log(`Stuback listening on port ${CLIOPTS.port}
 You can use Automatic proxy configuration at http://localhost:${CLIOPTS.port}/stuback/proxy.pac
 Admin at http://localhost:${CLIOPTS.port}/stuback/admin
 `);
+}
+
+startServer();
+process.on('uncaughtException', function (err) {
+	// if (err.code === 'ECONNRESET') {
+	console.log('Stuback crashed. Restarting... ?', err);
+
+	// 	startServer();
+	// }
+});
