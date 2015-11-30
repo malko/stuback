@@ -188,6 +188,7 @@ function proxyMiddleware(req, res, next, options = {}) {
 	//- on proxy error we need to either try to return a stub or pass to the connect middleware
 	function onError(err) {
 		VERBOSE && console.error('ERROR', err);
+		proxyReq.abort();
 		if (options.backedBy) {
 			options.hostConfig.passthrough = false;
 			stubMiddleware(req, res, next, options);
@@ -273,7 +274,7 @@ function stubMiddleware(req, res, next, options = {}) {
 			}
 			return next();
 		}
-		VERBOSE && console.log('Reply with get/%s', path.basename(stubFileName));
+		VERBOSE && console.log('Reply with %s', path.basename(stubFileName));
 		utils.applyResponseHeaders(res, hostConfig.responseHeaders);
 		if (options.stubbedBy) {
 			utils.applyResponseHeaders(res, hostConfig.stubs.responseHeaders);
@@ -288,6 +289,10 @@ function stubMiddleware(req, res, next, options = {}) {
 		}
 		let stub = fs.createReadStream(stubFileName);
 		stub.pipe(res);
+		stub.on('error', function (err) {
+			VERBOSE && console.log('Read file error %s', path.basename(stubFileName), err);
+			res.end();
+		});
 	});
 }
 
@@ -325,8 +330,9 @@ app.use((req, res, next) => {
 		stubMiddleware(req, res, next, middleWareOptions);
 	} else if (middleWareOptions.backedBy) {
 		proxyMiddleware(req, res, next, middleWareOptions);
-	} else if (middleWareOptions.passthrough) {
-		proxyMiddleware(req, res, next);
+	} else if (hostConfig.passthrough) {
+		VERBOSE && console.log('proxying call to %s', hostKey);
+		proxyMiddleware(req, res, next, middleWareOptions);
 	} else {
 		next();
 	}
