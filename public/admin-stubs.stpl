@@ -6,24 +6,25 @@
 </head>
 <body>
 	<h1>Stuback Admin - Stubs</h1>
-	<ul>
+	<input type=search id="search" placeholder="search"/>
+	<ul class="hosts">
 	<strong>{{#hosts}}</strong><li>
 	{{name}}
-	<ul>
-		{{#stubPaths}}
-		<li><strong>{{path|decodeURIComponent}}</strong>
-			<ul>{{#stubs}}
-			<li>
-				<b>{{method}}</b> - {{name|decodeURIComponent}}
+	<ul class="paths">
+		{{#stubPaths as stubPath}}
+		<li data-search="{{stubPath.path|decodeURIComponent}}"><strong>{{stubPath.path|decodeURIComponent}}</strong>
+			<ul class="stubs">{{#stubPath.stubs as stub}}
+			<li data-search="{{stubPath.path|decodeURIComponent}}/{{stub.name|decodeURIComponent}}">
+				<b>{{stub.method}}</b> - {{stub.name|decodeURIComponent}}
 				<span class="action">
-					<a href="/stuback/admin-stubs/view?path={{file|encodeURIComponent}}">view</a>
-					<a href="/stuback/admin-stubs/delete?path={{file|encodeURIComponent}}"
+					<a href="/stuback/admin-stubs/view?path={{stub.file|encodeURIComponent}}">view</a>
+					<a href="/stuback/admin-stubs/delete?path={{stub.file|encodeURIComponent}}"
 						onclick="return confirm('are you sure you want to delete this stub?');"
 						class="red"
 					>delete</a>
 				</span>
 			</li>
-			{{/stubs}}</ul>
+			{{/stubPath.stubs}}</ul>
 		</li>
 		{{/stubPaths}}
 	</ul>
@@ -32,5 +33,35 @@
 	<footer>
 		<button onclick="window.location='/stuback/admin'">back</button>
 	</footer>
+	<script>
+		(function() {
+			var searchInput = document.getElementById('search');
+			var pathsElmts = slice(document.querySelectorAll('.paths > li'));
+			var items = slice(document.querySelectorAll('.stubs > li'));
+
+			function slice(list) {
+				return [].slice.apply(list);
+			}
+			function show(elmt) { elmt.classList.remove('hidden'); }
+			function hide(elmt) { elmt.classList.add('hidden'); }
+			function showAll() { pathsElmts.forEach(show); items.forEach(show); }
+			function hideAll(){ items.forEach(hide); }
+			function performSearch() {
+				var term = search.value;
+				if (!term) {
+					showAll();
+					return;
+				}
+				hideAll();
+				slice(document.querySelectorAll('.stubs li[data-search*="' + term + '"]')).forEach(show);
+				pathsElmts.forEach(function (pathElmt){
+					pathElmt.querySelector('li:not(.hidden)') || hide(pathElmt);
+				});
+
+			}
+			searchInput.addEventListener('change', performSearch, false);
+			searchInput.addEventListener('keyup', performSearch, false);
+		})();
+	</script>
 </body>
 </html>

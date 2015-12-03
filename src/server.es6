@@ -55,6 +55,8 @@ Flags:
 };
 
 const DEFAULT_CONFIG = `{
+	"adminLogin": "admin",
+	"adminPass": "stuback",
 	"localhost": {
 		"passthrough": true,
 		"stubs": {},

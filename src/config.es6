@@ -53,6 +53,10 @@ class Config{
 		}
 		return null;
 	}
+
+	getStubMaxSize() {
+		return 'stubMaxSize' in this._config ? +this._config.stubMaxSize : '5mb';
+	}
 }
 
 export default Config;

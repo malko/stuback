@@ -96,3 +96,12 @@ footer button:hover, footer button:focus {
 footer button.red:hover, footer button.red:focus{
 	background-color: #A33;
 }
+form {
+	display: inline;
+}
+#search {
+	width: 100%;
+}
+.hidden{
+	display: none;
+}

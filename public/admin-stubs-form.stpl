@@ -8,15 +8,15 @@
 	<h1>Stuback Admin - Stub</h1>
 	<div>
 		<label for="method">Http Method: </label>
-		<input id="method" type="text" placeholder="method" value="{{{method}}}"/>
+		<input id="method" type="text" placeholder="method" value="{{{method}}}" readonly/>
 	</div>
 	<div>
 		<label for="host">Host: </label>
-		<input id="host" ²type="text" placeholder="host" value="{{{host}}}:{{{port}}}"/>
+		<input id="host" ²type="text" placeholder="host" value="{{{host}}}:{{{port}}}" readonly/>
 	</div>
 	<div>
 		<label for="url">Stub Path: </label>
-		<input id="url" type="text" placeholder="path uri" value="{{{url}}}"/>
+		<input id="url" type="text" placeholder="path uri" value="{{{url}}}" readonly/>
 	</div>
 	<div>
 		<label for="content">
@@ -27,7 +27,29 @@
 	</div>
 	<footer>
 		<button class="red" onclick="if(confirm('are you sure you want to delete this stub?')) window.location='/stuback/admin-stubs/delete?path={{fileFullPath|encodeURIComponent}}'">delete</button>
+		<form method="post">
+			<input type="hidden" name="content" value=""/>
+			<button>save</button>
+		</form>
 		<button onclick="window.location='/stuback/admin-stubs'">back</button>
 	</footer>
+	<script>
+		(function() {
+			var hiddenContent = document.querySelector('input[name="content"]');
+			var content = document.getElementById('content');
+			var form = document.querySelector('form');
+			function onsubmit(event) {
+				hiddenContent.value = content.value;
+			}
+			form.addEventListener('submit', onsubmit, false);
+			document.body.addEventListener('keydown', function(e) {
+				if (e.ctrlKey && e.keyCode === 83) {
+					e.preventDefault();
+					hiddenContent.value = content.value;
+					form.submit();
+				}
+			}, false);
+		})()
+	</script>
 </body>
 </html>

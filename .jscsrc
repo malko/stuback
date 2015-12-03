@@ -3,10 +3,6 @@
 		"beforeOpeningRoundBrace": true
 	},
 
-	"requireSpacesInAnonymousFunctionExpression": {
-		"beforeOpeningRoundBrace": true
-	},
-
 	"disallowEmptyBlocks": true,
 	"disallowSpacesInsideArrayBrackets": true,
 	"disallowSpacesInsideParentheses": true,
