@@ -89,6 +89,11 @@ var Config = (function () {
 			}
 			return null;
 		}
+	}, {
+		key: 'getStubMaxSize',
+		value: function getStubMaxSize() {
+			return 'stubMaxSize' in this._config ? +this._config.stubMaxSize : '5mb';
+		}
 	}]);
 
 	return Config;

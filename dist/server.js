@@ -55,7 +55,7 @@ var HELP_MESSAGE = function HELP_MESSAGE(exitCode) {
 	process.exit(exitCode);
 };
 
-var DEFAULT_CONFIG = '{\n\t"localhost": {\n\t\t"passthrough": true,\n\t\t"stubs": {},\n\t\t"backed": {},\n\t\t"tampered": {},\n\t\t"targetHost": false,\n\t\t"targetPort": false\n\t}\n}';
+var DEFAULT_CONFIG = '{\n\t"adminLogin": "admin",\n\t"adminPass": "stuback",\n\t"localhost": {\n\t\t"passthrough": true,\n\t\t"stubs": {},\n\t\t"backed": {},\n\t\t"tampered": {},\n\t\t"targetHost": false,\n\t\t"targetPort": false\n\t}\n}';
 
 //----- CLI PARAMETERS PARSING -----//
 if (process.argv.length <= 2) {

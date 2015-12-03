@@ -18,6 +18,10 @@ var _fs = require('fs');
 
 var _fs2 = _interopRequireDefault(_fs);
 
+var _bodyParser = require('body-parser');
+
+var _bodyParser2 = _interopRequireDefault(_bodyParser);
+
 var stpl = _stpl3['default'].stpl;
 
 //preload all stpl templates
@@ -25,6 +29,10 @@ var templateDir = _path2['default'].normalize(__dirname + '/../public');
 _fs2['default'].readdirSync(templateDir).forEach(function (tplFile) {
 	var matches = tplFile.match(/^([^\.]+)\.stpl$/);
 	matches && stpl.registerString(matches[1], _fs2['default'].readFileSync(_path2['default'].normalize(templateDir + '/' + tplFile)).toString());
+});
+
+stpl.registerFilter('stringify', function (a) {
+	return JSON.stringify(a);
 });
 
 function use(app, CLIOPTS, config) {
@@ -54,7 +62,7 @@ function use(app, CLIOPTS, config) {
 	}
 
 	function replyTemplate(res, tplName, tplData) {
-		res.setHeader('Content-Type', 'text/html');
+		res.setHeader('Content-Type', 'text/html; charset=utf-8');
 		res.setHeader('Pragma', 'no-cache');
 		try {
 			res.end(stpl(tplName, tplData));
@@ -97,6 +105,20 @@ function use(app, CLIOPTS, config) {
 		};
 	}
 
+	function responseStub(res, stubPath) {
+		res.setHeader('Content-Type', 'text/plain');
+		var tplData = parseStubPath(stubPath);
+		_fs2['default'].readFile(stubPath, function (err, raw) {
+			if (err) {
+				res.statusCode = 404;
+				return res.end(err.toString());
+			}
+			tplData.content = raw;
+			replyTemplate(res, 'admin-stubs-form', tplData);
+		});
+	}
+
+	app.use(_bodyParser2['default'].urlencoded({ extended: false, limit: config.getStubMaxSize() }));
 	//-- proxy auto config generation
 	app.use('/stuback/proxy.pac', function (req, res /*, next*/) {
 		console.log('serving PAC for %s', req.connection.remoteAddress);
@@ -114,15 +136,15 @@ function use(app, CLIOPTS, config) {
 			return false;
 		}
 		var stubPath = decodeStubParam(req);
-		res.setHeader('Content-Type', 'text/plain');
-		var tplData = parseStubPath(stubPath);
-		_fs2['default'].readFile(stubPath, function (err, raw) {
-			if (err) {
-				res.statusCode = 404;
-				return res.end(err.toString());
+		if (req.method !== 'POST') {
+			return responseStub(res, stubPath);
+		}
+		_fs2['default'].writeFile(stubPath, req.body.content, function (err) {
+			if (!err) {
+				return responseStub(res, stubPath);
 			}
-			tplData.content = raw;
-			replyTemplate(res, 'admin-stubs-form', tplData);
+			res.statusCode = 500;
+			return res.end(err.toString());
 		});
 	});
 
